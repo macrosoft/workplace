@@ -1,3 +1,4 @@
+#include <ArduinoOTA.h>
 #include <ChainableLED.h>
 #include <ESP8266WiFi.h>
 #include "config.h"
@@ -9,7 +10,7 @@ ChainableLED led(CLK_LED_PIN, DATA_LED_PIN, 1);
 
 void setup() {
   led.init();
-  led.setColorRGB(0, random(255), random(255), random(255));
+  led.setColorRGB(0, 255, 64, 0);
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -21,7 +22,10 @@ void setup() {
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+  ArduinoOTA.setHostname("workplace");
+  ArduinoOTA.begin();
 }
 
 void loop() {
+  ArduinoOTA.handle();
 }
