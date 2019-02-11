@@ -11,9 +11,13 @@ ESP8266WebServer webServer(80);
 ESP8266HTTPUpdateServer httpUpdater;
 ChainableLED led(CLK_LED_PIN, DATA_LED_PIN, 1);
 
+float v = 1.0;
+float saturation = 1.0;
+float offsetHue = 0.0;
+
 void setup() {
   led.init();
-  led.setColorRGB(0, 255, 64, 0);
+  led.setColorRGB(0, 0, 0, 0);
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -38,8 +42,31 @@ void setup() {
   }
   httpUpdater.setup(&webServer, "/update", USERNAME, PASSWORD);
   webServer.begin();
+  offsetHue = random(1024)/1023.0;
 }
 
 void loop() {
+  updateLedColor();
   webServer.handleClient();
+}
+
+void updateLedColor() {
+  float hue = millis()%10800000/10800000.0 + offsetHue;
+  if (hue >= 1.0)
+    hue -= 1.0;
+  byte i = hue*6;
+  float f = hue*6 - i;
+  float p = v*(1 - saturation);
+  float q = v*(1 - f*saturation);
+  float t = v*(1 - (1 - f)*saturation);
+  float r, g, b;
+  switch(i%6){
+        case 0: r = v, g = t, b = p; break;
+        case 1: r = q, g = v, b = p; break;
+        case 2: r = p, g = v, b = t; break;
+        case 3: r = p, g = q, b = v; break;
+        case 4: r = t, g = p, b = v; break;
+        case 5: r = v, g = p, b = q; break;
+  }
+  led.setColorRGB(0, round(255*r), round(255*g), round(255*b));
 }
