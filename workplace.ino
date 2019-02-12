@@ -54,8 +54,12 @@ void updateLedColor() {
   float hue = millis()%10800000/10800000.0 + offsetHue;
   if (hue >= 1.0)
     hue -= 1.0;
-  byte i = hue*6;
-  float f = hue*6 - i;
+  float scaledHue = hue < 3.0/6.0? hue*2.0/3.0:
+                    hue < 4.0/6.0? 1.0/3.0 + (hue - 3.0/6.0):
+                    hue < 5.0/6.0? 1.0/2.0 + (hue - 4.0/6.0)*2.0:
+                    hue;
+  byte i = scaledHue*6;
+  float f = scaledHue*6 - i;
   float p = v*(1 - saturation);
   float q = v*(1 - f*saturation);
   float t = v*(1 - (1 - f)*saturation);
