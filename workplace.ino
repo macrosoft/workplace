@@ -14,6 +14,7 @@ ChainableLED led(CLK_LED_PIN, DATA_LED_PIN, 1);
 float v = 1.0;
 float saturation = 1.0;
 float offsetHue = 0.0;
+byte light = 0;
 
 void setup() {
   led.init();
@@ -42,10 +43,16 @@ void setup() {
   }
   httpUpdater.setup(&webServer, "/update", USERNAME, PASSWORD);
   webServer.begin();
+  webServer.on("/ajax", handleAjax);
   offsetHue = random(1024)/1023.0;
 }
 
 void loop() {
+  light = map(analogRead(A0), 0, 1023, 100, 0);
+  if (light > 40)
+    v = 0.0;
+  else if (light < 30)
+    v = 1.0;
   updateLedColor();
   webServer.handleClient();
 }
@@ -73,4 +80,10 @@ void updateLedColor() {
         case 5: r = v, g = p, b = q; break;
   }
   led.setColorRGB(0, round(255*r), round(255*g), round(255*b));
+}
+
+void handleAjax() {
+  webServer.send(200, "text/plain",
+                 "{ \"light\": " + String(light) +
+                 "}");
 }
