@@ -2,6 +2,7 @@
 #include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
+#include <FS.h>
 #include "config.h"
 
 #define CLK_LED_PIN D0
@@ -43,7 +44,15 @@ void setup() {
     Serial.print("AP IP address: ");
     Serial.println(WiFi.softAPIP());
   }
+  if (SPIFFS.begin()) {
+    Serial.println("SPIFFS Initialize....ok");
+  } else {
+    Serial.println("SPIFFS Initialization...failed");
+  }
   httpUpdater.setup(&webServer, "/update", USERNAME, PASSWORD);
+  webServer.on("/jquery.min.js", []() {
+    sendFile("/jquery.min.js", "text/javascript");
+  });
   webServer.begin();
   webServer.on("/ajax", handleAjax);
   offsetHue = random(1024)/1023.0;
@@ -92,6 +101,16 @@ void handleAjax() {
   webServer.send(200, "text/plain",
                  "{ \"light\": " + String(light) +
                  "}");
+}
+
+void sendFile(String fileName, String type) {
+  File f = SPIFFS.open(fileName, "r");
+  if (!f) {
+    Serial.println(fileName + " open failed");
+  } else {
+    webServer.streamFile(f, type);
+    f.close();
+  }
 }
 
 bool isTimer(unsigned long startTime, unsigned long period) {
