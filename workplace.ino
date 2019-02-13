@@ -11,10 +11,12 @@ ESP8266WebServer webServer(80);
 ESP8266HTTPUpdateServer httpUpdater;
 ChainableLED led(CLK_LED_PIN, DATA_LED_PIN, 1);
 
-float v = 1.0;
+float v = 0.0;
+byte value = 0;
 float saturation = 1.0;
 float offsetHue = 0.0;
 byte light = 0;
+unsigned long lightTimer = 0;
 
 void setup() {
   led.init();
@@ -49,10 +51,14 @@ void setup() {
 
 void loop() {
   light = map(analogRead(A0), 0, 1023, 100, 0);
-  if (light > 40)
-    v = 0.0;
-  else if (light < 30)
-    v = 1.0;
+  if (isTimer(lightTimer, 15)) {
+    lightTimer = millis();
+    if (light > 40 and value > 0)
+      --value;
+    else if (light < 30 and value < 255)
+      ++value;
+    v = value/255.0;
+  }
   updateLedColor();
   webServer.handleClient();
 }
@@ -86,4 +92,14 @@ void handleAjax() {
   webServer.send(200, "text/plain",
                  "{ \"light\": " + String(light) +
                  "}");
+}
+
+bool isTimer(unsigned long startTime, unsigned long period) {
+  unsigned long currentTime;
+  currentTime = millis();
+  if (currentTime >= startTime) {
+    return (currentTime >= (startTime + period));
+  } else {
+    return (currentTime >= (0xFFFFFFFF - startTime + period));
+  }
 }
