@@ -50,11 +50,12 @@ void setup() {
     Serial.println("SPIFFS Initialization...failed");
   }
   httpUpdater.setup(&webServer, "/update", USERNAME, PASSWORD);
+  webServer.begin();
+  webServer.on("/", handleRoot);
+  webServer.on("/ajax", handleAjax);
   webServer.on("/jquery.min.js", []() {
     sendFile("/jquery.min.js", "text/javascript");
   });
-  webServer.begin();
-  webServer.on("/ajax", handleAjax);
   offsetHue = random(1024)/1023.0;
 }
 
@@ -95,6 +96,30 @@ void updateLedColor() {
         case 5: r = v, g = p, b = q; break;
   }
   led.setColorRGB(0, round(255*r), round(255*g), round(255*b));
+}
+
+void handleRoot() {
+  String content = "<!DOCTYPE html>";
+  content += "<html>";
+  content += "<head><meta charset=\"utf-8\">";
+  content += "<title>Workplace</title>";
+  content += "<script src=\"jquery.min.js\"></script>";
+  content += "<script type=\"text/javascript\">";
+  content += "$(document).ready(function(){";
+  content += "$.ajaxSetup({ cache: false });";
+  content += "setInterval(function() {";
+  content += "$.get(\"ajax\", function(result){";
+  content += "vars = JSON.parse(result.trim());";
+  content += "$('#light').text(vars.light);";
+  content += "});},1000);";
+  content += "});";
+  content += "</script>";
+  content += "</head>";
+  content += "<body>";
+  content += "Light: <span id='light'>-</span>";
+  content += "</body>";
+  content += "</html>";
+  webServer.send(200, "text/html", content);
 }
 
 void handleAjax() {
