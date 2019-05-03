@@ -6,10 +6,14 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <ArduinoOTA.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 #include "config.h"
 
 #define CLK_LED_PIN D0
 #define DATA_LED_PIN D1
+#define SDA_PIN D2
+#define SCL_PIN D3
 #define ONE_WIRE_PIN D4
 
 ESP8266WebServer webServer(80);
@@ -19,6 +23,8 @@ ChainableLED led(CLK_LED_PIN, DATA_LED_PIN, 1);
 OneWire oneWire(ONE_WIRE_PIN);
 DallasTemperature temp_sensor(&oneWire);
 DeviceAddress temp_addr;
+
+LiquidCrystal_I2C lcd(0x3F, 16, 2);
 
 float v = 0.0;
 byte value = 0;
@@ -68,9 +74,22 @@ void setup() {
   offsetHue = random(1024)/1023.0;
   temp_sensor.begin();
   temp_sensor.getAddress(temp_addr, 0);
+  Wire.begin(SDA_PIN, SCL_PIN);
+  lcd.begin();
+  lcd.clear();
+  lcd.backlight();
+  lcd.print("Hello,");
+  lcd.setCursor(0, 1);
+  lcd.print("world!");
   ArduinoOTA.setHostname("workplace");
   if (!WiFi.status() == WL_CONNECTED)
     ArduinoOTA.setPassword(PASSWORD);
+  ArduinoOTA.onEnd([]() {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Updating...");
+    lcd.blink();
+  });
   ArduinoOTA.begin();
 }
 
