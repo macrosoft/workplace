@@ -5,6 +5,7 @@
 #include <FS.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <ArduinoOTA.h>
 #include "config.h"
 
 #define CLK_LED_PIN D0
@@ -67,6 +68,10 @@ void setup() {
   offsetHue = random(1024)/1023.0;
   temp_sensor.begin();
   temp_sensor.getAddress(temp_addr, 0);
+  ArduinoOTA.setHostname("workplace");
+  if (!WiFi.status() == WL_CONNECTED)
+    ArduinoOTA.setPassword(PASSWORD);
+  ArduinoOTA.begin();
 }
 
 void loop() {
@@ -85,6 +90,7 @@ void loop() {
     temp_sensor.requestTemperatures();
   }
   webServer.handleClient();
+  ArduinoOTA.handle();
 }
 
 void updateLedColor() {
@@ -125,7 +131,7 @@ void handleRoot() {
   content += "$.get(\"ajax\", function(result){";
   content += "vars = JSON.parse(result.trim());";
   content += "$('#light').text(vars.light);";
-  content += "$('#temp').text(vars.temp);";
+  content += "$('#temp').text(vars.temp + '°С\');";
   content += "});},1000);";
   content += "});";
   content += "</script>";
