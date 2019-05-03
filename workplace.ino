@@ -33,6 +33,7 @@ float offsetHue = 0.0;
 byte light = 0;
 unsigned long oneHzTimer = 0;
 unsigned long lightTimer = 0;
+unsigned long updateTimer = 0;
 
 void setup() {
   led.init();
@@ -78,17 +79,30 @@ void setup() {
   lcd.begin();
   lcd.clear();
   lcd.backlight();
-  lcd.print("Hello,");
-  lcd.setCursor(0, 1);
-  lcd.print("world!");
   ArduinoOTA.setHostname("workplace");
   if (!WiFi.status() == WL_CONNECTED)
     ArduinoOTA.setPassword(PASSWORD);
-  ArduinoOTA.onEnd([]() {
+  ArduinoOTA.onStart([]() {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Updating...");
     lcd.blink();
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    lcd.noBlink();
+    if (isTimer(updateTimer, 250)) {
+      oneHzTimer = millis();
+      lcd.setCursor(0, 1);
+      lcd.print("Progress:");
+      lcd.print(progress/(total/100));
+      lcd.print("%");
+    }
+  });
+  ArduinoOTA.onEnd([]() {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Rebooting... ");
+    lcd.setCursor(12, 0);
   });
   ArduinoOTA.begin();
 }
@@ -107,6 +121,13 @@ void loop() {
   if (isTimer(oneHzTimer, 1000)) {
     oneHzTimer = millis();
     temp_sensor.requestTemperatures();
+    lcd.setCursor(0, 0);
+    lcd.print("Temp: ");
+    lcd.print(temp_sensor.getTempC(temp_addr), 1);
+    lcd.print(" C");
+    lcd.setCursor(0, 1);
+    lcd.print("Light: ");
+    lcd.print(light);
   }
   webServer.handleClient();
   ArduinoOTA.handle();
