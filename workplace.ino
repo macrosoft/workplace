@@ -9,6 +9,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include "config.h"
+#include "big_digits.h"
 
 #define CLK_LED_PIN D0
 #define DATA_LED_PIN D1
@@ -25,6 +26,7 @@ DallasTemperature temp_sensor(&oneWire);
 DeviceAddress temp_addr;
 
 LiquidCrystal_I2C lcd(0x3F, 16, 2);
+BigDigitsPrinter printer(&lcd);
 
 float v = 0.0;
 byte value = 0;
@@ -79,6 +81,7 @@ void setup() {
   lcd.begin();
   lcd.clear();
   lcd.backlight();
+  printer.begin();
   ArduinoOTA.setHostname("workplace");
   if (!WiFi.status() == WL_CONNECTED)
     ArduinoOTA.setPassword(PASSWORD);
@@ -121,13 +124,7 @@ void loop() {
   if (isTimer(oneHzTimer, 1000)) {
     oneHzTimer = millis();
     temp_sensor.requestTemperatures();
-    lcd.setCursor(0, 0);
-    lcd.print("Temp: ");
-    lcd.print(temp_sensor.getTempC(temp_addr), 1);
-    lcd.print(" C");
-    lcd.setCursor(0, 1);
-    lcd.print("Light: ");
-    lcd.print(light);
+    printer.print(0, temp_sensor.getTempC(temp_addr));
   }
   webServer.handleClient();
   ArduinoOTA.handle();
