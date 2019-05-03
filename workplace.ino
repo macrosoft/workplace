@@ -3,20 +3,28 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
 #include <FS.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #include "config.h"
 
 #define CLK_LED_PIN D0
 #define DATA_LED_PIN D1
+#define ONE_WIRE_PIN D4
 
 ESP8266WebServer webServer(80);
 ESP8266HTTPUpdateServer httpUpdater;
 ChainableLED led(CLK_LED_PIN, DATA_LED_PIN, 1);
+
+OneWire oneWire(ONE_WIRE_PIN);
+DallasTemperature temp_sensor(&oneWire);
+DeviceAddress temp_addr;
 
 float v = 0.0;
 byte value = 0;
 float saturation = 1.0;
 float offsetHue = 0.0;
 byte light = 0;
+unsigned long oneHzTimer = 0;
 unsigned long lightTimer = 0;
 
 void setup() {
@@ -57,6 +65,8 @@ void setup() {
     sendFile("/jquery.min.js", "text/javascript");
   });
   offsetHue = random(1024)/1023.0;
+  temp_sensor.begin();
+  temp_sensor.getAddress(temp_addr, 0);
 }
 
 void loop() {
@@ -70,6 +80,10 @@ void loop() {
     v = value/255.0;
   }
   updateLedColor();
+  if (isTimer(oneHzTimer, 1000)) {
+    oneHzTimer = millis();
+    temp_sensor.requestTemperatures();
+  }
   webServer.handleClient();
 }
 
@@ -111,12 +125,14 @@ void handleRoot() {
   content += "$.get(\"ajax\", function(result){";
   content += "vars = JSON.parse(result.trim());";
   content += "$('#light').text(vars.light);";
+  content += "$('#temp').text(vars.temp);";
   content += "});},1000);";
   content += "});";
   content += "</script>";
   content += "</head>";
   content += "<body>";
-  content += "Light: <span id='light'>-</span>";
+  content += "Light: <span id='light'>-</span><br>";
+  content += "Temperature: <span id='temp'>-</span><br>";
   content += "</body>";
   content += "</html>";
   webServer.send(200, "text/html", content);
@@ -125,6 +141,7 @@ void handleRoot() {
 void handleAjax() {
   webServer.send(200, "text/plain",
                  "{ \"light\": " + String(light) +
+                 ", \"temp\": " + String(temp_sensor.getTempC(temp_addr),1) +
                  "}");
 }
 
