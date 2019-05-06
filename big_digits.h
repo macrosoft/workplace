@@ -89,16 +89,6 @@ class BigDigitsPrinter {
       B11111,
       B11111
     };
-    byte grad[8] = {
-      B01111,
-      B01001,
-      B01001,
-      B01111,
-      B00000,
-      B00000,
-      B00000,
-      B00000
-    };
   LiquidCrystal_I2C *lcd;
   void printDigit(byte x, byte n);
 };
@@ -115,7 +105,6 @@ void BigDigitsPrinter::begin() {
   lcd->createChar(5,LR);
   lcd->createChar(6,MB);
   lcd->createChar(7,FULL);
-  lcd->createChar(8,grad);
 }
 
 void BigDigitsPrinter::print(byte x, float n) {
@@ -124,7 +113,7 @@ void BigDigitsPrinter::print(byte x, float n) {
   lcd->setCursor(x + 7, 1);
   lcd->print(".");
   lcd->print(byte(n*10)%10);
-  lcd->write(8);
+  lcd->print(char(223));
   lcd->print("C");
 }
 
