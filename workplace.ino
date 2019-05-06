@@ -11,6 +11,7 @@
 #include "config.h"
 #include "az_timer.h"
 #include "big_digits.h"
+#include "ntp.h"
 
 #define CLK_LED_PIN D0
 #define DATA_LED_PIN D1
@@ -28,6 +29,7 @@ DeviceAddress temp_addr;
 
 LiquidCrystal_I2C lcd(0x3F, 16, 2);
 BigDigitsPrinter printer(&lcd);
+NtpClient ntp;
 
 float v = 0.0;
 byte value = 0;
@@ -37,7 +39,6 @@ byte light = 0;
 AZTimer oneHzTimer(1000);
 AZTimer lightTimer(20);
 AZTimer updateTimer(250);
-int uptime = 0;
 
 void setup() {
   led.init();
@@ -126,8 +127,9 @@ void loop() {
     temp_sensor.requestTemperatures();
     printer.print(0, temp_sensor.getTempC(temp_addr));
     lcd.setCursor(10, 0);
-    lcd.print(++uptime);
+    lcd.print(ntp.getTime());
   }
+  ntp.handle();
   webServer.handleClient();
   ArduinoOTA.handle();
 }

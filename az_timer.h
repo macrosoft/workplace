@@ -5,6 +5,7 @@ class AZTimer {
   public:
     AZTimer(unsigned long p);
     bool check();
+    void start();
   private:
     unsigned long start_time;
     unsigned long period;
@@ -26,6 +27,10 @@ bool AZTimer::check() {
   }
   start_time = current/period*period;
   return true;
+}
+
+void AZTimer::start() {
+  start_time = millis();
 }
 
 #endif
