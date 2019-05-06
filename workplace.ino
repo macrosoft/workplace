@@ -9,6 +9,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include "config.h"
+#include "az_timer.h"
 #include "big_digits.h"
 
 #define CLK_LED_PIN D0
@@ -33,9 +34,10 @@ byte value = 0;
 float saturation = 1.0;
 float offsetHue = 0.0;
 byte light = 0;
-unsigned long oneHzTimer = 0;
-unsigned long lightTimer = 0;
-unsigned long updateTimer = 0;
+AZTimer oneHzTimer(1000);
+AZTimer lightTimer(20);
+AZTimer updateTimer(250);
+int uptime = 0;
 
 void setup() {
   led.init();
@@ -93,8 +95,7 @@ void setup() {
   });
   ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
     lcd.noBlink();
-    if (isTimer(updateTimer, 250)) {
-      oneHzTimer = millis();
+    if (updateTimer.check()) {
       lcd.setCursor(0, 1);
       lcd.print("Progress:");
       lcd.print(progress/(total/100));
@@ -112,8 +113,7 @@ void setup() {
 
 void loop() {
   light = map(analogRead(A0), 0, 1023, 100, 0);
-  if (isTimer(lightTimer, 15)) {
-    lightTimer = millis();
+  if (lightTimer.check()) {
     if (light > 40 and value > 0)
       --value;
     else if (light < 30 and value < 255)
@@ -121,10 +121,11 @@ void loop() {
     v = value/255.0;
   }
   updateLedColor();
-  if (isTimer(oneHzTimer, 1000)) {
-    oneHzTimer = millis();
+  if (oneHzTimer.check()) {
     temp_sensor.requestTemperatures();
     printer.print(0, temp_sensor.getTempC(temp_addr));
+    lcd.setCursor(10, 0);
+    lcd.print(++uptime);
   }
   webServer.handleClient();
   ArduinoOTA.handle();
@@ -195,15 +196,5 @@ void sendFile(String fileName, String type) {
   } else {
     webServer.streamFile(f, type);
     f.close();
-  }
-}
-
-bool isTimer(unsigned long startTime, unsigned long period) {
-  unsigned long currentTime;
-  currentTime = millis();
-  if (currentTime >= startTime) {
-    return (currentTime >= (startTime + period));
-  } else {
-    return (currentTime >= (0xFFFFFFFF - startTime + period));
   }
 }
