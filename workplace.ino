@@ -79,6 +79,7 @@ void setup() {
   offsetHue = random(1024)/1023.0;
   temp_sensor.begin();
   temp_sensor.getAddress(temp_addr, 0);
+  temp_sensor.setWaitForConversion(false);
   Wire.begin(SDA_PIN, SCL_PIN);
   lcd.begin();
   lcd.clear();

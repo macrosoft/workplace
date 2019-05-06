@@ -4,17 +4,18 @@
 class AZTimer {
   public:
     AZTimer(unsigned long p);
-    bool check(bool reset = true);
+    bool check();
   private:
     unsigned long start_time;
     unsigned long period;
 };
 
-AZTimer::AZTimer(unsigned long p): period(p) {
+AZTimer::AZTimer(unsigned long p) {
+  period = p? p: 1;
   start_time = 0;
 }
 
-bool AZTimer::check(bool reset) {
+bool AZTimer::check() {
   unsigned long current = millis();
   if (current >= start_time) {
     if (current < (start_time + period))
@@ -23,21 +24,8 @@ bool AZTimer::check(bool reset) {
     if (current < (0xFFFFFFFF - start_time + period))
       return false;
   }
-  if (reset)
-    start_time = current;
+  start_time = current/period*period;
   return true;
 }
-
-/*
-bool isTimer(unsigned long startTime, unsigned long period) {
-  unsigned long currentTime;
-  currentTime = millis();
-  if (currentTime >= startTime) {
-    return (currentTime >= (startTime + period));
-  } else {
-    return (currentTime >= (0xFFFFFFFF - startTime + period));
-  }
-}
-*/
 
 #endif
