@@ -126,8 +126,26 @@ void loop() {
   if (oneHzTimer.check()) {
     temp_sensor.requestTemperatures();
     printer.print(0, temp_sensor.getTempC(temp_addr));
-    lcd.setCursor(10, 0);
-    lcd.print(ntp.getTime());
+    lcd.setCursor(8, 0);
+    int now = ntp.getTime();
+    if (now >= 0) {
+      byte h = ntp.getTime()/60/60;
+      byte m = ntp.getTime()/60 - h*60;
+      byte s = ntp.getTime()%60;
+      if (h < 10)
+        lcd.print("0");
+      lcd.print(h);
+      lcd.print(":");
+      if (m < 10)
+        lcd.print("0");
+      lcd.print(m);
+      lcd.print(":");
+      if (s < 10)
+        lcd.print("0");
+      lcd.print(s);
+    } else {
+      lcd.print("--:--:--");
+    }
   }
   ntp.handle();
   webServer.handleClient();
