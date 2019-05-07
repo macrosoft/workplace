@@ -9,86 +9,13 @@ class BigDigitsPrinter {
     void begin();
     void print(byte x, float n);
   private:
-    byte LT[8] = {
-      B00111,
-      B01111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111
-    };
-    byte UB[8] = {
-      B11111,
-      B11111,
-      B11111,
-      B00000,
-      B00000,
-      B00000,
-      B00000,
-      B00000
-    };
-    byte RT[8] = {
-      B11100,
-      B11110,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111
-    };
-    byte LL[8] = {
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B01111,
-      B00111
-    };
-    byte LB[8] = {
-      B00000,
-      B00000,
-      B00000,
-      B00000,
-      B00000,
-      B11111,
-      B11111,
-      B11111
-    };
-    byte LR[8] = {
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11110,
-      B11100
-    };
-    byte MB[8] = {
-      B11111,
-      B11111,
-      B11111,
-      B00000,
-      B00000,
-      B00000,
-      B11111,
-      B11111
-    };
-    byte FULL[8] = {
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111,
-      B11111
-    };
+  byte LT[8] = {B00111, B01111, B11111, B11111, B11111, B11111, B11111, B11111};
+  byte UB[8] = {B11111, B11111, B11111, B00000, B00000, B00000, B00000, B00000};
+  byte RT[8] = {B11100, B11110, B11111, B11111, B11111, B11111, B11111, B11111};
+  byte LL[8] = {B11111, B11111, B11111, B11111, B11111, B11111, B01111, B00111};
+  byte LB[8] = {B00000, B00000, B00000, B00000, B00000, B11111, B11111, B11111};
+  byte LR[8] = {B11111, B11111, B11111, B11111, B11111, B11111, B11110, B11100};
+  byte MB[8] = {B11111, B11111, B11111, B00000, B00000, B00000, B11111, B11111};
   LiquidCrystal_I2C *lcd;
   void printDigit(byte x, byte n);
 };
@@ -104,7 +31,6 @@ void BigDigitsPrinter::begin() {
   lcd->createChar(4,LB);
   lcd->createChar(5,LR);
   lcd->createChar(6,MB);
-  lcd->createChar(7,FULL);
 }
 
 void BigDigitsPrinter::print(byte x, float n) {
@@ -136,7 +62,7 @@ void BigDigitsPrinter::printDigit(byte x, byte n){
       lcd->print(" ");
       lcd->setCursor(x,1);
       lcd->write(4);
-      lcd->write(7);
+      lcd->write(255);
       lcd->write(4);
       break;
     case 2:
@@ -163,11 +89,11 @@ void BigDigitsPrinter::printDigit(byte x, byte n){
       lcd->setCursor(x,0);
       lcd->write(3);
       lcd->write(4);
-      lcd->write(7);
+      lcd->write(255);
       lcd->setCursor(x, 1);
       lcd->print(" ");
       lcd->print(" ");
-      lcd->write(7);
+      lcd->write(255);
       break;
     case 5:
       lcd->setCursor(x,0);
@@ -197,7 +123,7 @@ void BigDigitsPrinter::printDigit(byte x, byte n){
       lcd->setCursor(x, 1);
       lcd->print(" ");
       lcd->print(" ");
-      lcd->write(7);
+      lcd->write(255);
       break;
     case 8:
       lcd->setCursor(x,0);
