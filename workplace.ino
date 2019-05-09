@@ -2,6 +2,7 @@
 #include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
 #include <FS.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -18,6 +19,8 @@
 #define SDA_PIN D2
 #define SCL_PIN D3
 #define ONE_WIRE_PIN D4
+WiFiClientSecure secureClient;
+HTTPClient http;
 
 ESP8266WebServer webServer(80);
 ESP8266HTTPUpdateServer httpUpdater;
@@ -39,6 +42,7 @@ byte light = 0;
 AZTimer oneHzTimer(1000);
 AZTimer lightTimer(20);
 AZTimer updateTimer(250);
+String weather = "{}";
 
 void setup() {
   led.init();
@@ -74,6 +78,7 @@ void setup() {
   webServer.begin();
   webServer.on("/", handleRoot);
   webServer.on("/ajax", handleAjax);
+  webServer.on("/weather", handleWeather);
   webServer.on("/jquery.min.js", []() {
     sendFile("/jquery.min.js", "text/javascript");
   });
@@ -86,6 +91,9 @@ void setup() {
   lcd.clear();
   lcd.backlight();
   printer.begin();
+  secureClient.setInsecure();
+  http.begin(secureClient, "https://api.weather.yandex.ru/v1/informers?lat=" + String(LATITUDE) + "&lon=" + String(LONGITUDE));
+  http.addHeader("X-Yandex-API-Key", YANDEX_API_KEY);
   ArduinoOTA.setHostname("workplace");
   if (!WiFi.status() == WL_CONNECTED)
     ArduinoOTA.setPassword(PASSWORD);
@@ -145,6 +153,9 @@ void loop() {
       lcd.print(s);
     } else {
       lcd.print("--:--:--");
+    }
+    if (http.GET() > 0 and weather.length() < 10) {
+      weather = http.getString();
     }
   }
   ntp.handle();
@@ -208,6 +219,10 @@ void handleAjax() {
                  "{ \"light\": " + String(light) +
                  ", \"temp\": " + String(temp_sensor.getTempC(temp_addr),1) +
                  "}");
+}
+
+void handleWeather() {
+  webServer.send(200, "text/plain", weather);
 }
 
 void sendFile(String fileName, String type) {

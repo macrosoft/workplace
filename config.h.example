@@ -5,5 +5,8 @@ const char *WIFI_SSID = "...";
 const char *WIFI_PASS = "...";
 const char *USERNAME = "admin";
 const char *PASSWORD = "...";
+const char *LATITUDE = "55.753726";
+const char *LONGITUDE = "37.619873";
+const char *YANDEX_API_KEY = "qwertyui-opas-dfgh-jklz-xcvbnm012345";
 
 #endif
