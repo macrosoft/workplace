@@ -42,7 +42,8 @@ byte light = 0;
 AZTimer oneHzTimer(1000);
 AZTimer lightTimer(20);
 AZTimer updateTimer(250);
-String weather = "{}";
+int outdoor_temp = -100;
+int outdoor_humidity = -100;
 
 void setup() {
   led.init();
@@ -78,7 +79,6 @@ void setup() {
   webServer.begin();
   webServer.on("/", handleRoot);
   webServer.on("/ajax", handleAjax);
-  webServer.on("/weather", handleWeather);
   webServer.on("/jquery.min.js", []() {
     sendFile("/jquery.min.js", "text/javascript");
   });
@@ -154,9 +154,7 @@ void loop() {
     } else {
       lcd.print("--:--:--");
     }
-    if (http.GET() > 0 and weather.length() < 10) {
-      weather = http.getString();
-    }
+    updateOutDoorWeather();
   }
   ntp.handle();
   webServer.handleClient();
@@ -221,8 +219,47 @@ void handleAjax() {
                  "}");
 }
 
-void handleWeather() {
-  webServer.send(200, "text/plain", weather);
+void updateOutDoorWeather() {
+  static bool overdue = true;
+  static unsigned int timer = 0;
+  if (overdue and http.GET() > 0) {
+    String json = http.getString();
+    int pos = json.indexOf("\"temp\":");
+    if (pos > 0) {
+      String str = json.substring(pos + 7, pos + 10);
+      outdoor_temp = str.toInt();
+    }
+    pos = json.indexOf("\"humidity\":");
+    if (pos > 0) {
+      String str = json.substring(pos + 11, pos + 14);
+      outdoor_humidity = str.toInt();
+    }
+    json = "";
+    overdue = false;
+    timer = 0;
+  }
+  if (!overdue)
+    ++timer;
+  if (timer >= 108000)
+    overdue = true;
+  if (outdoor_temp == -100 or outdoor_humidity == -100)
+    return;
+  lcd.setCursor(11, 1);
+  if (millis()%10000 < 5000) {
+    if (outdoor_temp > -10)
+      lcd.print(" ");
+    if (outdoor_temp >= 0 and outdoor_temp < 10)
+      lcd.print(" ");
+    lcd.print(outdoor_temp);
+    lcd.print(char(223));
+    lcd.print("C");
+  } else {
+    lcd.print("  ");
+    if (outdoor_humidity < 10)
+      lcd.print(" ");
+    lcd.print(outdoor_humidity);
+    lcd.print("%");
+  }
 }
 
 void sendFile(String fileName, String type) {
