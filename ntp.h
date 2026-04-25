@@ -20,7 +20,7 @@ class NtpClient {
     WiFiUDP udpNtp;
     int ntp_state;
     AZTimer oneHzTimer = AZTimer(1000);
-    AZTimer parseTimer = AZTimer(10000);
+    AZTimer parseTimer = AZTimer(3000);
     AZTimer resynchTimer = AZTimer(21600000UL); //6h
     byte currentNtpServer;
     int now;

@@ -1,8 +1,10 @@
 #include <ChainableLED.h>
 #include <ESP8266HTTPUpdateServer.h>
 #include <ESP8266WebServer.h>
+
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
+
 #include <FS.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -20,7 +22,6 @@
 #define SCL_PIN D3
 #define ONE_WIRE_PIN D4
 WiFiClientSecure secureClient;
-HTTPClient http;
 
 ESP8266WebServer webServer(80);
 ESP8266HTTPUpdateServer httpUpdater;
@@ -46,7 +47,7 @@ int outdoor_temp = -100;
 int outdoor_humidity = -100;
 
 void setup() {
-  led.init();
+  //led.init();
   led.setColorRGB(0, 0, 0, 0);
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
@@ -87,13 +88,11 @@ void setup() {
   temp_sensor.getAddress(temp_addr, 0);
   temp_sensor.setWaitForConversion(false);
   Wire.begin(SDA_PIN, SCL_PIN);
-  lcd.begin();
+  lcd.begin(16, 2);
   lcd.clear();
   lcd.backlight();
   printer.begin();
   secureClient.setInsecure();
-  http.begin(secureClient, "https://api.weather.yandex.ru/v1/informers?lat=" + String(LATITUDE) + "&lon=" + String(LONGITUDE));
-  http.addHeader("X-Yandex-API-Key", YANDEX_API_KEY);
   ArduinoOTA.setHostname("workplace");
   if (!WiFi.status() == WL_CONNECTED)
     ArduinoOTA.setPassword(PASSWORD);
@@ -133,7 +132,9 @@ void loop() {
   updateLedColor();
   if (oneHzTimer.check()) {
     temp_sensor.requestTemperatures();
-    printer.print(0, temp_sensor.getTempC(temp_addr));
+    float t = temp_sensor.getTempC(temp_addr);
+    if (t < 50.0)
+      printer.print(0, t);
     lcd.setCursor(8, 0);
     int now = ntp.getTime();
     if (now >= 0) {
@@ -222,8 +223,12 @@ void handleAjax() {
 void updateOutDoorWeather() {
   static bool overdue = true;
   static unsigned int timer = 0;
-  if (overdue and http.GET() > 0) {
-    String json = http.getString();
+  if (overdue) {
+    HTTPClient https;
+    https.begin(secureClient, "https://api.weather.yandex.ru/v1/informers?lat=" + String(LATITUDE) + "&lon=" + String(LONGITUDE));
+    https.addHeader("X-Yandex-API-Key", YANDEX_API_KEY);
+    if (https.GET() > 0) {
+    String json = https.getString();
     int pos = json.indexOf("\"temp\":");
     if (pos > 0) {
       String str = json.substring(pos + 7, pos + 10);
@@ -238,9 +243,11 @@ void updateOutDoorWeather() {
     overdue = false;
     timer = 0;
   }
+  https.end(); 
+  }
   if (!overdue)
     ++timer;
-  if (timer >= 108000)
+  if (timer >= 1800)
     overdue = true;
   if (outdoor_temp == -100 or outdoor_humidity == -100)
     return;

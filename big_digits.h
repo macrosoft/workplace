@@ -34,14 +34,20 @@ void BigDigitsPrinter::begin() {
 }
 
 void BigDigitsPrinter::print(byte x, float n) {
-  printDigit(x, n/10);
-  printDigit(x + 4, byte(n)%10);
+  int whole = (int)n; 
+  printDigit(x, whole / 10);
+  printDigit(x + 4, whole % 10);
+  
   lcd->setCursor(x + 7, 1);
   lcd->print(".");
-  lcd->print(byte(n*10)%10);
-  lcd->print(char(223));
+  byte tenths = (byte)((n - whole) * 10);
+  
+  lcd->print(tenths);
+  
+  lcd->print(char(223)); // Градус
   lcd->print("C");
 }
+
 
 void BigDigitsPrinter::printDigit(byte x, byte n){
   switch (n) {
