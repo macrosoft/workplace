@@ -31,7 +31,7 @@ OneWire oneWire(ONE_WIRE_PIN);
 DallasTemperature temp_sensor(&oneWire);
 DeviceAddress temp_addr;
 
-LiquidCrystal_I2C lcd(0x3F, 16, 2);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 BigDigitsPrinter printer(&lcd);
 NtpClient ntp;
 
