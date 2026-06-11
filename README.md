@@ -6,7 +6,7 @@ Firmware for an ESP32-based workplace information display.
 
 - Real-time clock via NTP (UTC+3)
 - Outdoor weather from Yandex Weather API (temperature, humidity, pressure, wind, sunset)
-- Indoor temperature placeholder (hardcoded)
+- Indoor temperature via DS18B20 (1-Wire)
 - WiFi station mode with AP fallback (`"workplace"`)
 - Display: ST7789 240×320 SPI TFT via TFT_eSPI library
 
@@ -21,6 +21,7 @@ Firmware for an ESP32-based workplace information display.
 | GPIO 2     | Data / Command     | `TFT_DC`        |                      |
 | GPIO 4     | Reset              | `TFT_RST`       |                      |
 | GPIO 5     | Backlight          | `TFT_BL`        | HIGH = on, can be PWM |
+| GPIO 16    | DS18B20 data       | —               | 1-Wire, requires 4.7kΩ pull-up to 3.3V |
 
 > SPI pins (MOSI, MISO, SCLK) use the ESP32 default VSPI peripheral.
 
