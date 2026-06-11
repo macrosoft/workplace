@@ -10,6 +10,7 @@
 #include "ntp.h"
 
 #define DS18B20_PIN 16
+#define PHOTO_PIN 34
 
 OneWire oneWire(DS18B20_PIN);
 DallasTemperature sensors(&oneWire);
@@ -38,6 +39,8 @@ String outdoor_sunset = "--:--";
 
 float indoor_temp = 0.0;
 unsigned long lastSensorRead = 0;
+
+int lightLevel = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -118,6 +121,8 @@ void loop() {
   if (millis() - lastScreenUpdate >= 1000) {
     lastScreenUpdate = millis();
     
+    lightLevel = analogRead(PHOTO_PIN);
+
     updateClock();
     updateWiFiStatus();
     drawWeatherDashboard();
@@ -298,6 +303,13 @@ void drawWeatherDashboard() {
     tft.setCursor(inCx + 18, 125);
     tft.print("C");
   }
+
+  // Фоторезистор
+  tft.setTextSize(2);
+  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  tft.fillRect(230, 175, 86, 20, TFT_BLACK);
+  tft.setCursor(230, 175);
+  tft.print(lightLevel);
 }
 
 // Парсинг Яндекса остается без изменений, он отлично работает на ESP32

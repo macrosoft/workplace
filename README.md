@@ -22,6 +22,7 @@ Firmware for an ESP32-based workplace information display.
 | GPIO 4     | Reset              | `TFT_RST`       |                      |
 | GPIO 5     | Backlight          | `TFT_BL`        | HIGH = on, can be PWM |
 | GPIO 16    | DS18B20 data       | —               | 1-Wire, requires 4.7kΩ pull-up to 3.3V |
+| GPIO 34    | Photoresistor      | —               | ADC input, voltage divider with 10kΩ to GND |
 
 > SPI pins (MOSI, MISO, SCLK) use the ESP32 default VSPI peripheral.
 
