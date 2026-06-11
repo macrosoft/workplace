@@ -2,13 +2,14 @@
 #define NTP_H
 
 #include <WiFiUdp.h>
-#include "az_timer.h"
+#include <time.h> // Нужно для структур времени
 
 class NtpClient {
   public:
     NtpClient();
+    void begin();
     void handle();
-    int getTime();
+    unsigned long getTime(); // ТЕПЕРЬ ВОЗВРАЩАЕТ UNSIGNED LONG (Полный Unix Time)
   private:
     static const int NTP_SERVER_COUNT = 5;
     static const int NTP_PACKET_SIZE = 48;
@@ -19,60 +20,77 @@ class NtpClient {
                    , NTP_WAITING = 3;
     WiFiUDP udpNtp;
     int ntp_state;
-    AZTimer oneHzTimer = AZTimer(1000);
-    AZTimer parseTimer = AZTimer(3000);
-    AZTimer resynchTimer = AZTimer(21600000UL); //6h
+    
+    unsigned long last1HzTick = 0;
+    unsigned long parseTimeoutStart = 0;
+    unsigned long lastSyncTime = 0;
+    
     byte currentNtpServer;
-    int now;
+    unsigned long now; // ТЕПЕРЬ ХРАНИТ ПОЛНЫЙ UNIX TIMESTAMP
 
     void sendNtpPacket(const char address[]);
-    int parseNtpPacket();
+    unsigned long parseNtpPacket();
 };
 
 NtpClient::NtpClient() {
-  now = -1;
+  now = 0;
   currentNtpServer = -1;
   ntp_state = NTP_INIT;
-  udpNtp.begin(2390);
+}
+
+void NtpClient::begin() {
+  int res = udpNtp.begin(2390); 
+  Serial.print("[NTP DBG] UDP Socket on port 2390: ");
+  Serial.println(res == 1 ? "SUCCESS" : "FAILED");
 }
 
 void NtpClient::handle() {
-  if (oneHzTimer.check()) {
-    if (now >= 0) {
-      ++now;
-      if (now >= 86400L)
-        now = 0;
+  if (millis() - last1HzTick >= 1000) {
+    last1HzTick = millis();
+    if (now > 0) {
+      ++now; // Прибавляем 1 секунду к Unix Time
     }
   }
-  switch (ntp_state) {
-  case NTP_INIT: {
-    currentNtpServer = ++currentNtpServer%NTP_SERVER_COUNT;
-    sendNtpPacket(ntpServers[currentNtpServer]);
-    ntp_state = NTP_PARSE;
-    parseTimer.start();
-    break;
-  }
-  case NTP_PARSE: {
-    if (parseTimer.check()) {
-      int t = parseNtpPacket();
-      if (t > 0) {
-        now = t;
-        ntp_state = NTP_WAITING;
-      } else {
-        ntp_state = NTP_INIT;
+
+  if (WiFi.status() == WL_CONNECTED) {
+    switch (ntp_state) {
+      case NTP_INIT: {
+        currentNtpServer = ++currentNtpServer % NTP_SERVER_COUNT;
+        sendNtpPacket(ntpServers[currentNtpServer]);
+        ntp_state = NTP_PARSE;
+        parseTimeoutStart = millis(); 
+        break;
+      }
+      case NTP_PARSE: {
+        if (millis() - parseTimeoutStart >= 3000) { 
+          unsigned long t = parseNtpPacket();
+          if (t > 0) {
+            now = t;
+            ntp_state = NTP_WAITING;
+            lastSyncTime = millis(); 
+            Serial.println("[NTP DBG] Success! Time synced.");
+          } else {
+            ntp_state = NTP_INIT;
+            Serial.println("[NTP DBG] Sync failed. Retrying next server...");
+          }
+        }
+        break;
+      }
+      case NTP_WAITING: {
+        if (millis() - lastSyncTime >= 21600000UL) { 
+          ntp_state = NTP_INIT;
+        }
+        break;
       }
     }
-    break;
-  }
-  case NTP_WAITING: {
-      if (resynchTimer.check()) { //6h
-        ntp_state = NTP_INIT;
-      }
+  } else {
+    if (ntp_state != NTP_INIT) {
+      ntp_state = NTP_INIT;
     }
   }
 }
 
-int NtpClient::getTime() {
+unsigned long NtpClient::getTime() {
   return now;
 }
 
@@ -84,26 +102,30 @@ void NtpClient::sendNtpPacket(const char address[]) {
   packetBuffer[1] = 0;
   packetBuffer[2] = 6;
   packetBuffer[3] = 0xEC;
-  packetBuffer[12]  = 49;
-  packetBuffer[13]  = 0x4E;
-  packetBuffer[14]  = 49;
-  packetBuffer[15]  = 52;
+  packetBuffer[12] = 49;
+  packetBuffer[13] = 0x4E;
+  packetBuffer[14] = 49;
+  packetBuffer[15] = 52;
+  
   udpNtp.beginPacket(ip, 123);
   udpNtp.write(packetBuffer, NTP_PACKET_SIZE);
   udpNtp.endPacket();
 }
 
-int NtpClient::parseNtpPacket() {
+unsigned long NtpClient::parseNtpPacket() {
   int cb = udpNtp.parsePacket();
-  if (!cb)
-    return -1;
+  if (!cb) return 0;
+    
   udpNtp.read(packetBuffer, NTP_PACKET_SIZE);
-  unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
-  unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
-  unsigned long secsSince1900 = highWord << 16 | lowWord;
+
+  unsigned long secsSince1900 = (unsigned long)packetBuffer[40] << 24 |
+                                (unsigned long)packetBuffer[41] << 16 |
+                                (unsigned long)packetBuffer[42] << 8  |
+                                (unsigned long)packetBuffer[43];
+
   const unsigned long seventyYears = 2208988800UL;
-  unsigned long epoch = secsSince1900 - seventyYears + 10800;
-  return epoch % 86400L;
+  // Возвращаем полный Timestamp (с учетом UTC+3)
+  return secsSince1900 - seventyYears + 10800; 
 }
 
 #endif
