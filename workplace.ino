@@ -3,9 +3,16 @@
 #include <WiFiClientSecure.h> 
 #include <SPI.h>
 #include <TFT_eSPI.h>          // ЗАМЕНА Adafruit на TFT_eSPI!
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 #include "config.h"
 #include "ntp.h"
+
+#define DS18B20_PIN 16
+
+OneWire oneWire(DS18B20_PIN);
+DallasTemperature sensors(&oneWire);
 
 // TFT_eSPI инициализируется без указания пинов здесь, 
 // они берутся из User_Setup.h!
@@ -29,9 +36,14 @@ int outdoor_pressure = -100;
 float outdoor_wind_speed = -100.0;
 String outdoor_sunset = "--:--";
 
+float indoor_temp = 0.0;
+unsigned long lastSensorRead = 0;
+
 void setup() {
   Serial.begin(115200);
   Serial.println("\n[SYSTEM] Booting ESP32...");
+
+  sensors.begin();
 
   // Включение подсветки дисплея (GPIO 5)
   // В будущем сюда можно подать ШИМ (ledc) для регулировки яркости
@@ -85,6 +97,13 @@ void setup() {
 
 void loop() {
   ntp.handle();
+
+  // Чтение DS18B20 раз в 10 секунд
+  if (millis() - lastSensorRead >= 10000) {
+    lastSensorRead = millis();
+    sensors.requestTemperatures();
+    indoor_temp = sensors.getTempCByIndex(0);
+  }
 
   // Запрос погоды раз в 30 минут (только если есть Wi-Fi)
   if (WiFi.status() == WL_CONNECTED) {
@@ -257,26 +276,28 @@ void drawWeatherDashboard() {
   // ПРАВАЯ ЧАСТЬ (Дом)
   // ==========================================
   
-  float indoor_temp = 23.4; // Твоя заглушка
-  
   tft.setTextSize(4); // Размер уменьшен с 5 до 4
   tft.setTextColor(TFT_ORANGE, TFT_BLACK);
   
   char inTempStr[8];
-  sprintf(inTempStr, "%.1f", indoor_temp); 
+  if (indoor_temp < -50 || indoor_temp > 150) {
+    sprintf(inTempStr, "--.-");
+  } else {
+    sprintf(inTempStr, "%.1f", indoor_temp);
+  }
   
   // Локальная зачистка старого градуса Дома
   tft.fillRect(240, 125, 70, 35, TFT_BLACK);
 
   tft.setCursor(160, 125); 
   tft.print(inTempStr);
-  
-  int inCx = tft.getCursorX();
-  // Радиус градуса уменьшен до 4
-  drawDegreeSymbol(inCx + 6, 125, 4, TFT_ORANGE); 
-  
-  tft.setCursor(inCx + 18, 125);
-  tft.print("C");
+
+  if (indoor_temp >= -50 && indoor_temp <= 150) {
+    int inCx = tft.getCursorX();
+    drawDegreeSymbol(inCx + 6, 125, 4, TFT_ORANGE);
+    tft.setCursor(inCx + 18, 125);
+    tft.print("C");
+  }
 }
 
 // Парсинг Яндекса остается без изменений, он отлично работает на ESP32
