@@ -1,10 +1,13 @@
-#include <WiFi.h>              // Было ESP8266WiFi.h
-#include <HTTPClient.h>        // Было ESP8266HTTPClient.h
-#include <WiFiClientSecure.h> 
+#include <WiFi.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <SPI.h>
-#include <TFT_eSPI.h>          // ЗАМЕНА Adafruit на TFT_eSPI!
+#include <TFT_eSPI.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <FS.h>
+#include <SPIFFS.h>
+#include <ArduinoOTA.h>
 
 #include "config.h"
 #include "ntp.h"
@@ -12,24 +15,30 @@
 #define DS18B20_PIN 16
 #define PHOTO_PIN 34
 
+struct Config {
+  char ssid[32] = {0};
+  char pass[64] = {0};
+  uint16_t lightLow = 1200;
+  uint16_t lightHigh = 1600;
+};
+
+Config cfg;
+
 OneWire oneWire(DS18B20_PIN);
 DallasTemperature sensors(&oneWire);
 
-// TFT_eSPI инициализируется без указания пинов здесь, 
-// они берутся из User_Setup.h!
-TFT_eSPI tft = TFT_eSPI(); 
+TFT_eSPI tft = TFT_eSPI();
 
 NtpClient ntp;
-WiFiClientSecure secureClient; 
+WiFiClientSecure secureClient;
+WiFiServer server(80);
 
 unsigned long lastScreenUpdate = 0;
 unsigned long lastWeatherUpdate = 0;
 bool firstWeatherDone = false;
 
-// Глобальная переменная для отслеживания первой отрисовки
-bool isFirstWeatherDraw = true; 
+bool isFirstWeatherDraw = true;
 
-// Переменные погоды Яндекса
 int outdoor_temp = -100;
 int outdoor_humidity = -100;
 int outdoor_feels_like = -100;
@@ -41,6 +50,7 @@ float indoor_temp = 0.0;
 unsigned long lastSensorRead = 0;
 
 int lightLevel = 0;
+bool lightState = false;
 
 void setup() {
   Serial.begin(115200);
@@ -48,33 +58,43 @@ void setup() {
 
   sensors.begin();
 
-  // Включение подсветки дисплея (GPIO 5)
-  // В будущем сюда можно подать ШИМ (ledc) для регулировки яркости
   pinMode(5, OUTPUT);
-  digitalWrite(5, HIGH); 
+  digitalWrite(5, HIGH);
 
-  // Инициализация дисплея ILI9341
+  if (!SPIFFS.begin(true)) {
+    Serial.println("[SPIFFS] Mount failed, using defaults");
+  } else {
+    fs::File f = SPIFFS.open("/config", "r");
+    if (f) {
+      f.read((uint8_t*)&cfg, sizeof(cfg));
+      f.close();
+      Serial.println("[SPIFFS] Config loaded");
+    } else {
+      Serial.println("[SPIFFS] No config file, using defaults");
+    }
+  }
+
   tft.init();
   tft.invertDisplay(false);
-  tft.setRotation(1); // Пейзажная ориентация
+  tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
 
-  // Рисуем статичный интерфейс
   drawInterfaceSkeleton();
 
-  // Начальная прорисовка (плейсхолдеры)
   updateClock();
   updateWiFiStatus();
   drawWeatherDashboard();
 
-  // Подключение к Wi-Fi
+  const char* ssid = cfg.ssid[0] ? cfg.ssid : WIFI_SSID;
+  const char* pass = cfg.ssid[0] ? cfg.pass : WIFI_PASS;
+
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  WiFi.begin(ssid, pass);
   Serial.print("[WIFI] Connecting to ");
-  Serial.print(WIFI_SSID);
+  Serial.print(ssid);
 
   bool connected = false;
-  for (byte i = 0; i < 40; i++) { // 10 seconds timeout
+  for (byte i = 0; i < 40; i++) {
     if (WiFi.status() == WL_CONNECTED) {
       connected = true;
       break;
@@ -85,30 +105,40 @@ void setup() {
 
   if (connected) {
     Serial.println(" [OK]");
-    ntp.begin(); 
-    Serial.println("[NTP] Custom NTP client started.");
+    Serial.print("IP: ");
+    Serial.println(WiFi.localIP());
+    ntp.begin();
+    Serial.println("[NTP] Started");
   } else {
     Serial.println(" [FAILED]");
     WiFi.mode(WIFI_AP);
     WiFi.softAP("workplace", PASSWORD);
-    Serial.println("[WIFI] Access Point 'workplace' started.");
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());
   }
 
-  secureClient.setInsecure(); // Пропуск проверки SSL сертификата (нужно для Яндекса)
+  secureClient.setInsecure();
   updateWiFiStatus();
+
+  server.begin();
+  Serial.println("[HTTP] Server started");
+
+  ArduinoOTA.setHostname("workplace");
+  if (!connected) ArduinoOTA.setPassword(PASSWORD);
+  ArduinoOTA.begin();
 }
 
 void loop() {
   ntp.handle();
+  handleWebClient();
+  ArduinoOTA.handle();
 
-  // Чтение DS18B20 раз в 10 секунд
   if (millis() - lastSensorRead >= 10000) {
     lastSensorRead = millis();
     sensors.requestTemperatures();
     indoor_temp = sensors.getTempCByIndex(0);
   }
 
-  // Запрос погоды раз в 30 минут (только если есть Wi-Fi)
   if (WiFi.status() == WL_CONNECTED) {
     if (!firstWeatherDone || (millis() - lastWeatherUpdate >= 1800000UL)) {
       lastWeatherUpdate = millis();
@@ -117,67 +147,43 @@ void loop() {
     }
   }
 
-  // Обновление экрана раз в секунду
+  lightLevel = analogRead(PHOTO_PIN);
+  if (!lightState && lightLevel > cfg.lightHigh)
+    lightState = true;
+  else if (lightState && lightLevel < cfg.lightLow)
+    lightState = false;
+
   if (millis() - lastScreenUpdate >= 1000) {
     lastScreenUpdate = millis();
-    
-    lightLevel = analogRead(PHOTO_PIN);
 
     updateClock();
     updateWiFiStatus();
     drawWeatherDashboard();
-    
-    // Вывод в консоль
-    Serial.print("[SYSTEM] WiFi: ");
-    Serial.print(WiFi.status() == WL_CONNECTED ? "CONNECTED" : "DISCONNECTED");
-    Serial.print(" | Time: ");
-    
-    int totalSeconds = ntp.getTime();
-    if (totalSeconds >= 0) {
-      int hours = (totalSeconds / 3600) % 24;
-      int minutes = (totalSeconds / 60) % 60;
-      int seconds = totalSeconds % 60;
-      Serial.printf("%02d:%02d:%02d", hours, minutes, seconds);
-    } else {
-      Serial.print("NOT SYNCED");
-    }
-
-    if (outdoor_temp != -100) {
-      Serial.printf(" | Weather: %+dC, %d%%, %dmmHg, %.1fm/s, Sunset: %s\n", 
-                    outdoor_temp, outdoor_humidity, outdoor_pressure, outdoor_wind_speed, outdoor_sunset.c_str());
-    } else {
-      Serial.println(" | Weather: NO DATA");
-    }
   }
-  
-  delay(1); 
+
+  delay(1);
 }
 
 void drawInterfaceSkeleton() {
-  // Только одна рамка по самому краю экрана
   tft.drawRect(0, 0, 320, 240, TFT_DARKGREY);
 }
 
 void updateWiFiStatus() {
   tft.setTextSize(1);     
   if (WiFi.getMode() == WIFI_STA && WiFi.status() == WL_CONNECTED) {
-    // Безопасно стираем строку, не задевая верхнюю рамку (y=2)
-    tft.fillRect(2, 2, 316, 15, TFT_BLACK); 
+    tft.fillRect(2, 2, 316, 15, TFT_BLACK);
   } else if (WiFi.getMode() == WIFI_AP) {
     tft.setCursor(10, 10);
     tft.setTextColor(TFT_RED, TFT_BLACK);
-    // Добавлены пробелы в конце для затирки артефактов!
     tft.print("AP MODE: Connect to 'workplace'        ");
   } else {
     tft.setCursor(10, 10);
     tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-    // Добавлены пробелы в конце для затирки артефактов!
     tft.print("WiFi: Offline - Reconnecting...        ");
   }
 }
 
 void updateClock() {
-  // Получаем полный Unix Time из нашего кастомного ntp.h
   unsigned long epochTime = ntp.getTime();
 
   if (epochTime == 0) {
@@ -188,12 +194,10 @@ void updateClock() {
     return;
   }
 
-  // Конвертируем Unix Time в структуру времени C++
   time_t rawtime = (time_t)epochTime;
   struct tm * ti;
   ti = localtime(&rawtime);
 
-  // 1. Рисуем ЧАСЫ
   char timeString[9];
   sprintf(timeString, "%02d:%02d:%02d", ti->tm_hour, ti->tm_min, ti->tm_sec);
   
@@ -202,12 +206,10 @@ void updateClock() {
   tft.setCursor(40, 25); 
   tft.print(timeString);
 
-  // 2. Рисуем ДАТУ и ДЕНЬ НЕДЕЛИ
   char dateString[32];
   const char* days[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
   const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
-  // Формат: "Monday, 25 Oct 2023"
   sprintf(dateString, "%s, %02d %s %04d   ", 
           days[ti->tm_wday], 
           ti->tm_mday, 
@@ -239,49 +241,36 @@ void drawWeatherDashboard() {
   }
 
   if (isFirstWeatherDraw) {
-    // Безопасная очистка всей нижней половины (не задевая рамку)
-    tft.fillRect(2, 100, 316, 135, TFT_BLACK); 
+    tft.fillRect(2, 100, 316, 135, TFT_BLACK);
     isFirstWeatherDraw = false;
   }
 
-  // ==========================================
-  // ЛЕВАЯ ЧАСТЬ (Улица)
-  // ==========================================
-  
-  tft.setTextSize(3); // Размер уменьшен
+  tft.setTextSize(3);
   tft.setTextColor(TFT_YELLOW, TFT_BLACK);
   
   char outTempStr[8];
   sprintf(outTempStr, "%+d", outdoor_temp); 
   
-  // Локальная зачистка старого градуса
-  tft.fillRect(70, 130, 50, 25, TFT_BLACK); 
+  tft.fillRect(70, 130, 50, 25, TFT_BLACK);
   
   tft.setCursor(20, 130); 
   tft.print(outTempStr);
   
   int outCx = tft.getCursorX(); 
-  // Радиус градуса уменьшен до 3
   drawDegreeSymbol(outCx + 5, 130, 3, TFT_YELLOW);
   
   tft.setCursor(outCx + 14, 130);
   tft.print("C");
 
-  // Влажность
-  tft.setTextSize(2); // Размер уменьшен
+  tft.setTextSize(2);
   tft.setTextColor(TFT_CYAN, TFT_BLACK);
   char outHumStr[12];
-  // Два пробела в конце работают как ластик для артефактов
   sprintf(outHumStr, "%d%%  ", outdoor_humidity);
   tft.setCursor(20, 175);
   tft.print(outHumStr);
 
 
-  // ==========================================
-  // ПРАВАЯ ЧАСТЬ (Дом)
-  // ==========================================
-  
-  tft.setTextSize(4); // Размер уменьшен с 5 до 4
+  tft.setTextSize(4);
   tft.setTextColor(TFT_ORANGE, TFT_BLACK);
   
   char inTempStr[8];
@@ -291,7 +280,6 @@ void drawWeatherDashboard() {
     sprintf(inTempStr, "%.1f", indoor_temp);
   }
   
-  // Локальная зачистка старого градуса Дома
   tft.fillRect(240, 125, 70, 35, TFT_BLACK);
 
   tft.setCursor(160, 125); 
@@ -304,15 +292,17 @@ void drawWeatherDashboard() {
     tft.print("C");
   }
 
-  // Фоторезистор
-  tft.setTextSize(2);
-  tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-  tft.fillRect(230, 175, 86, 20, TFT_BLACK);
-  tft.setCursor(230, 175);
-  tft.print(lightLevel);
+  tft.fillRect(230, 165, 86, 50, TFT_BLACK);
+  int cx = 255, cy = 190, r = 10;
+  if (lightState) {
+    tft.fillCircle(cx, cy, r, TFT_WHITE);
+  } else {
+    tft.drawCircle(cx, cy, r, TFT_DARKGREY);
+    tft.drawCircle(cx, cy, r - 1, TFT_DARKGREY);
+    tft.drawCircle(cx, cy, r - 2, TFT_DARKGREY);
+  }
 }
 
-// Парсинг Яндекса остается без изменений, он отлично работает на ESP32
 void updateOutDoorWeather() {
   if (WiFi.status() != WL_CONNECTED) return;
 
@@ -375,4 +365,127 @@ void updateOutDoorWeather() {
     }
     https.end();
   }
+}
+
+void handleWebClient() {
+  WiFiClient client = server.available();
+  if (!client) return;
+
+  String method = "";
+  String path = "";
+  String body = "";
+  int contentLength = 0;
+
+  while (client.connected() && !client.available()) delay(1);
+
+  if (client.available()) {
+    String reqLine = client.readStringUntil('\n');
+    reqLine.trim();
+    int s1 = reqLine.indexOf(' ');
+    int s2 = reqLine.indexOf(' ', s1 + 1);
+    if (s1 > 0 && s2 > s1) {
+      method = reqLine.substring(0, s1);
+      path = reqLine.substring(s1 + 1, s2);
+    }
+
+    while (true) {
+      String line = client.readStringUntil('\n');
+      if (line == "\r" || line == "") break;
+      if (line.startsWith("Content-Length:") || line.startsWith("content-length:")) {
+        contentLength = line.substring(line.indexOf(':') + 1).toInt();
+      }
+    }
+
+    if (contentLength > 0) {
+      body = client.readString();
+      body.trim();
+    }
+  }
+
+  if (method == "GET" && path == "/") {
+    String html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\">";
+    html += "<title>Workplace</title>";
+    html += "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
+    html += "<style>";
+    html += "body{font-family:Arial;margin:20px;background:#222;color:#ddd}";
+    html += "h1{color:#0f0}table{width:100%;border-collapse:collapse}";
+    html += "td{padding:8px 4px}.lbl{color:#999;font-size:.9em}";
+    html += ".val{font-size:1.5em;font-weight:bold;text-align:right}";
+    html += ".sec{margin:20px 0;padding:15px;background:#333;border-radius:8px}";
+    html += "input{width:100%;padding:8px;margin:4px 0 12px;box-sizing:border-box}";
+    html += "input[type=submit]{background:#070;color:#fff;border:0;padding:10px;font-size:1em;cursor:pointer}";
+    html += "label{font-weight:bold}";
+    html += "</style></head><body>";
+    html += "<h1>Workplace</h1>";
+    html += "<div class=\"sec\"><table>";
+    html += "<tr><td class=\"lbl\">Indoor</td><td class=\"val\" id=\"in\">--.-</td><td>&deg;C</td></tr>";
+    html += "<tr><td class=\"lbl\">Outdoor</td><td class=\"val\" id=\"out\">--</td><td>&deg;C</td></tr>";
+    html += "<tr><td class=\"lbl\">Humidity</td><td class=\"val\" id=\"hum\">--</td><td>%</td></tr>";
+    html += "<tr><td class=\"lbl\">Light</td><td class=\"val\" id=\"light\">--</td><td></td></tr>";
+    html += "</table></div>";
+    html += "<div class=\"sec\">";
+    html += "<h2>Light thresholds</h2>";
+    html += "<label>ON (dark) <input type=\"number\" id=\"lo\" value=\"" + String(cfg.lightLow) + "\"></label>";
+    html += "<label>OFF (bright) <input type=\"number\" id=\"hi\" value=\"" + String(cfg.lightHigh) + "\"></label>";
+    html += "<input type=\"submit\" value=\"Apply\" onclick=\"save()\">";
+    html += "<p id=\"msg\"></p>";
+    html += "</div>";
+    html += "<script>";
+    html += "function save(){";
+    html += "var b='lo='+document.getElementById('lo').value+'&hi='+document.getElementById('hi').value;";
+    html += "fetch('/save',{method:'POST',body:b,headers:{'Content-Type':'application/x-www-form-urlencoded'}})";
+    html += ".then(function(r){document.getElementById('msg').textContent='Saved'});}";
+    html += "setInterval(function(){";
+    html += "fetch('/ajax').then(function(r){return r.json()}).then(function(d){";
+    html += "document.getElementById('in').textContent=d.i;";
+    html += "document.getElementById('out').textContent=d.o;";
+    html += "document.getElementById('hum').textContent=d.h;";
+    html += "document.getElementById('light').textContent=d.l;";
+    html += "})},2000);";
+    html += "</script></body></html>";
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n");
+    client.print(html);
+
+  } else if (method == "POST" && path == "/save") {
+    int p1, p2;
+
+    p1 = body.indexOf("lo=");
+    if (p1 >= 0) {
+      p1 += 3;
+      p2 = body.indexOf("&", p1);
+      if (p2 < 0) p2 = body.length();
+      cfg.lightLow = body.substring(p1, p2).toInt();
+    }
+
+    p1 = body.indexOf("hi=");
+    if (p1 >= 0) {
+      p1 += 3;
+      p2 = body.indexOf("&", p1);
+      if (p2 < 0) p2 = body.length();
+      cfg.lightHigh = body.substring(p1, p2).toInt();
+    }
+
+    fs::File f = SPIFFS.open("/config", "w");
+    if (f) {
+      f.write((uint8_t*)&cfg, sizeof(cfg));
+      f.close();
+    }
+
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK");
+
+  } else if (method == "GET" && path == "/ajax") {
+    String json = "{";
+    json += "\"i\":\"" + String(indoor_temp, 1) + "\"";
+    json += ",\"o\":\"" + String(outdoor_temp) + "\"";
+    json += ",\"h\":\"" + String(outdoor_humidity) + "\"";
+    json += ",\"l\":\"" + String(lightLevel) + "\"";
+    json += "}";
+    client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
+    client.print(json);
+
+  } else {
+    client.print("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+  }
+
+  client.stop();
 }
