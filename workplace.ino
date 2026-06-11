@@ -52,9 +52,16 @@ unsigned long lastSensorRead = 0;
 int lightLevel = 0;
 bool lightState = false;
 
+float offsetHue;
+float v = 1.0;
+float saturation = 1.0;
+uint8_t ledR, ledG, ledB;
+
 void setup() {
   Serial.begin(115200);
   Serial.println("\n[SYSTEM] Booting ESP32...");
+
+  offsetHue = (float)esp_random() / UINT32_MAX;
 
   sensors.begin();
 
@@ -158,6 +165,7 @@ void loop() {
 
     updateClock();
     updateWiFiStatus();
+    updateLedColor();
     drawWeatherDashboard();
   }
 
@@ -231,6 +239,23 @@ void drawDegreeSymbol(int x, int y, int radius, uint16_t color) {
   tft.drawCircle(x, y + radius, radius - 1, color);
 }
 
+void updateLedColor() {
+  float hue = fmod(millis() / 21600000.0 + offsetHue, 1.0);
+  byte i = hue * 6;
+  float f = hue * 6 - i;
+  float p = v * (1 - saturation);
+  float q = v * (1 - f * saturation);
+  float t = v * (1 - (1 - f) * saturation);
+  switch (i % 6) {
+    case 0: ledR = v*255; ledG = t*255; ledB = p*255; break;
+    case 1: ledR = q*255; ledG = v*255; ledB = p*255; break;
+    case 2: ledR = p*255; ledG = v*255; ledB = t*255; break;
+    case 3: ledR = p*255; ledG = q*255; ledB = v*255; break;
+    case 4: ledR = t*255; ledG = p*255; ledB = v*255; break;
+    case 5: ledR = v*255; ledG = p*255; ledB = q*255; break;
+  }
+}
+
 void drawWeatherDashboard() {
   if (outdoor_temp == -100 || outdoor_humidity == -100) {
     tft.setTextSize(2);
@@ -295,7 +320,7 @@ void drawWeatherDashboard() {
   tft.fillRect(230, 165, 86, 50, TFT_BLACK);
   int cx = 255, cy = 190, r = 10;
   if (lightState) {
-    tft.fillCircle(cx, cy, r, TFT_WHITE);
+    tft.fillCircle(cx, cy, r, tft.color565(ledR, ledG, ledB));
   } else {
     tft.drawCircle(cx, cy, r, TFT_DARKGREY);
     tft.drawCircle(cx, cy, r - 1, TFT_DARKGREY);
