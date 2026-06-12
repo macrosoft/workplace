@@ -14,6 +14,8 @@
 
 #define DS18B20_PIN 16
 #define PHOTO_PIN 34
+#define LED_CLK_PIN 13
+#define LED_DATA_PIN 14
 
 struct Config {
   char ssid[32] = {0};
@@ -67,6 +69,9 @@ void setup() {
 
   pinMode(5, OUTPUT);
   digitalWrite(5, HIGH);
+
+  pinMode(LED_CLK_PIN, OUTPUT);
+  pinMode(LED_DATA_PIN, OUTPUT);
 
   if (!SPIFFS.begin(true)) {
     Serial.println("[SPIFFS] Mount failed, using defaults");
@@ -166,6 +171,10 @@ void loop() {
     updateClock();
     updateWiFiStatus();
     updateLedColor();
+    if (lightState)
+      ledWrite(ledR, ledG, ledB);
+    else
+      ledWrite(0, 0, 0);
     drawWeatherDashboard();
   }
 
@@ -256,6 +265,28 @@ void updateLedColor() {
   }
 }
 
+void ledWrite(uint8_t r, uint8_t g, uint8_t b) {
+  digitalWrite(LED_DATA_PIN, LOW);
+  for (byte i = 0; i < 32; i++) {
+    digitalWrite(LED_CLK_PIN, LOW);
+    digitalWrite(LED_CLK_PIN, HIGH);
+  }
+
+  uint32_t data = ((uint32_t)0xC3 << 24) | ((uint32_t)b << 16) | ((uint32_t)g << 8) | r;
+  for (byte i = 0; i < 32; i++) {
+    digitalWrite(LED_DATA_PIN, (data & 0x80000000) ? HIGH : LOW);
+    digitalWrite(LED_CLK_PIN, LOW);
+    digitalWrite(LED_CLK_PIN, HIGH);
+    data <<= 1;
+  }
+
+  digitalWrite(LED_DATA_PIN, LOW);
+  for (byte i = 0; i < 32; i++) {
+    digitalWrite(LED_CLK_PIN, LOW);
+    digitalWrite(LED_CLK_PIN, HIGH);
+  }
+}
+
 void drawWeatherDashboard() {
   if (outdoor_temp == -100 || outdoor_humidity == -100) {
     tft.setTextSize(2);
@@ -329,12 +360,10 @@ void drawWeatherDashboard() {
 }
 
 void updateOutDoorWeather() {
-  if (WiFi.status() != WL_CONNECTED) return;
-
+  if (WiFi.status() != WL_CONNECTED) return;  
   Serial.println("[HTTP] Requesting Yandex weather...");
   HTTPClient https;
   String url = "https://api.weather.yandex.ru/v1/informers?lat=" + String(LATITUDE) + "&lon=" + String(LONGITUDE);
-  
   if (https.begin(secureClient, url)) {
     https.addHeader("X-Yandex-API-Key", YANDEX_API_KEY);
     int httpCode = https.GET();
@@ -386,7 +415,9 @@ void updateOutDoorWeather() {
 
       Serial.printf("[HTTP] Sync OK. Temp: %d C\n", outdoor_temp);
     } else {
-      Serial.printf("[HTTP] GET failed, error: %d\n", httpCode);
+      Serial.printf("HTTP error: %d (%s)\n",
+                  httpCode,
+                  https.errorToString(httpCode).c_str());
     }
     https.end();
   }
