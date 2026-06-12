@@ -63,8 +63,6 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\n[SYSTEM] Booting ESP32...");
 
-  offsetHue = (float)esp_random() / UINT32_MAX;
-
   sensors.begin();
 
   pinMode(5, OUTPUT);
@@ -85,6 +83,8 @@ void setup() {
       Serial.println("[SPIFFS] No config file, using defaults");
     }
   }
+
+  offsetHue = (float)esp_random() / UINT32_MAX;
 
   tft.init();
   tft.invertDisplay(false);
@@ -471,6 +471,9 @@ void handleWebClient() {
     html += "input{width:100%;padding:8px;margin:4px 0 12px;box-sizing:border-box}";
     html += "input[type=submit]{background:#070;color:#fff;border:0;padding:10px;font-size:1em;cursor:pointer}";
     html += "label{font-weight:bold}";
+    html += ".swatch{width:60px;height:60px;border-radius:50%;border:2px solid #555;flex-shrink:0}";
+    html += ".row{display:flex;align-items:center;gap:15px}";
+    html += "input[type=range]{width:100%}";
     html += "</style></head><body>";
     html += "<h1>Workplace</h1>";
     html += "<div class=\"sec\"><table>";
@@ -486,17 +489,31 @@ void handleWebClient() {
     html += "<input type=\"submit\" value=\"Apply\" onclick=\"save()\">";
     html += "<p id=\"msg\"></p>";
     html += "</div>";
+    html += "<div class=\"sec\">";
+    html += "<h2>LED Color</h2>";
+    html += "<div class=\"row\">";
+    html += "<div class=\"swatch\" id=\"swatch\"></div>";
+    html += "<div style=\"flex:1\">";
+    html += "<label>Hue offset <span id=\"hueVal\">0</span>&deg;</label>";
+    html += "<input type=\"range\" id=\"oh\" min=\"0\" max=\"360\" value=\"0\" oninput=\"setHue(this.value)\">";
+    html += "</div></div></div>";
     html += "<script>";
     html += "function save(){";
     html += "var b='lo='+document.getElementById('lo').value+'&hi='+document.getElementById('hi').value;";
     html += "fetch('/save',{method:'POST',body:b,headers:{'Content-Type':'application/x-www-form-urlencoded'}})";
     html += ".then(function(r){document.getElementById('msg').textContent='Saved'});}";
+    html += "function setHue(v){";
+    html += "document.getElementById('hueVal').textContent=v;";
+    html += "fetch('/save',{method:'POST',body:'oh='+(v/360),headers:{'Content-Type':'application/x-www-form-urlencoded'}});}";
     html += "setInterval(function(){";
     html += "fetch('/ajax').then(function(r){return r.json()}).then(function(d){";
     html += "document.getElementById('in').textContent=d.i;";
     html += "document.getElementById('out').textContent=d.o;";
     html += "document.getElementById('hum').textContent=d.h;";
     html += "document.getElementById('light').textContent=d.l;";
+    html += "document.getElementById('swatch').style.background='rgb('+d.r+','+d.g+','+d.b+')';";
+    html += "document.getElementById('oh').value=Math.round(d.oh*360);";
+    html += "document.getElementById('hueVal').textContent=Math.round(d.oh*360);";
     html += "})},2000);";
     html += "</script></body></html>";
     client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n");
@@ -521,6 +538,14 @@ void handleWebClient() {
       cfg.lightHigh = body.substring(p1, p2).toInt();
     }
 
+    p1 = body.indexOf("oh=");
+    if (p1 >= 0) {
+      p1 += 3;
+      p2 = body.indexOf("&", p1);
+      if (p2 < 0) p2 = body.length();
+      offsetHue = body.substring(p1, p2).toFloat();
+    }
+
     fs::File f = SPIFFS.open("/config", "w");
     if (f) {
       f.write((uint8_t*)&cfg, sizeof(cfg));
@@ -535,6 +560,10 @@ void handleWebClient() {
     json += ",\"o\":\"" + String(outdoor_temp) + "\"";
     json += ",\"h\":\"" + String(outdoor_humidity) + "\"";
     json += ",\"l\":\"" + String(lightLevel) + "\"";
+    json += ",\"r\":\"" + String(ledR) + "\"";
+    json += ",\"g\":\"" + String(ledG) + "\"";
+    json += ",\"b\":\"" + String(ledB) + "\"";
+    json += ",\"oh\":\"" + String(offsetHue, 4) + "\"";
     json += "}";
     client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
     client.print(json);
