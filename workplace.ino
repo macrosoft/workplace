@@ -88,7 +88,7 @@ void setup() {
 
   tft.init();
   tft.invertDisplay(false);
-  tft.setRotation(1);
+  tft.setRotation(3);
   tft.fillScreen(TFT_BLACK);
 
   drawInterfaceSkeleton();
@@ -272,7 +272,7 @@ void ledWrite(uint8_t r, uint8_t g, uint8_t b) {
     digitalWrite(LED_CLK_PIN, HIGH);
   }
 
-  uint32_t data = ((uint32_t)0xC3 << 24) | ((uint32_t)b << 16) | ((uint32_t)g << 8) | r;
+  uint32_t data = ((uint32_t)0xC0 << 24) | ((uint32_t)b << 16) | ((uint32_t)g << 8) | r;
   for (byte i = 0; i < 32; i++) {
     digitalWrite(LED_DATA_PIN, (data & 0x80000000) ? HIGH : LOW);
     digitalWrite(LED_CLK_PIN, LOW);
