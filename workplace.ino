@@ -39,7 +39,16 @@ unsigned long lastScreenUpdate = 0;
 unsigned long lastWeatherUpdate = 0;
 bool firstWeatherDone = false;
 
-bool isFirstWeatherDraw = true;
+String lastTimeStr = "";
+int lastDateDay = -1;
+int lastOutTemp = -100;
+int lastOutHum = -100;
+float lastInTemp = -1000.0;
+bool lastLightState = false;
+uint8_t lastLedR = 0, lastLedG = 0, lastLedB = 0;
+
+TFT_eSprite dashSprite(&tft);
+bool dashSpriteInited = false;
 
 int outdoor_temp = -100;
 int outdoor_humidity = -100;
@@ -177,7 +186,26 @@ void loop() {
       ledWrite(ledR, ledG, ledB);
     else
       ledWrite(0, 0, 0);
-    drawWeatherDashboard();
+
+    bool dashChanged = false;
+    if (outdoor_temp != lastOutTemp || outdoor_humidity != lastOutHum) {
+      lastOutTemp = outdoor_temp;
+      lastOutHum = outdoor_humidity;
+      dashChanged = true;
+    }
+    if (abs(indoor_temp - lastInTemp) > 0.05f) {
+      lastInTemp = indoor_temp;
+      dashChanged = true;
+    }
+    if (lightState != lastLightState || ledR != lastLedR || ledG != lastLedG || ledB != lastLedB) {
+      lastLightState = lightState;
+      lastLedR = ledR; lastLedG = ledG; lastLedB = ledB;
+      dashChanged = true;
+    }
+
+    if (dashChanged) {
+      drawWeatherDashboard();
+    }
   }
 
   delay(1);
@@ -222,10 +250,13 @@ void updateClock() {
   uint16_t colorMint = tft.color565(100, 255, 130); 
 
   if (epochTime == 0) {
-    tft.setTextSize(6); 
-    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.setCursor(15, 15);
-    tft.print("--:--:--");
+    if (lastTimeStr != "--:--:--") {
+      lastTimeStr = "--:--:--";
+      tft.setTextSize(6); 
+      tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+      tft.setCursor(15, 15);
+      tft.print("--:--:--");
+    }
     return;
   }
 
@@ -235,30 +266,36 @@ void updateClock() {
 
   char timeString[9];
   sprintf(timeString, "%02d:%02d:%02d", ti->tm_hour, ti->tm_min, ti->tm_sec);
-  
-  tft.setTextSize(6); 
-  tft.setTextColor(colorMint, TFT_BLACK); 
-  tft.setCursor(15, 15);
-  tft.print(timeString);
 
-  char dateString[32];
-  const char* days[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
-  const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+  if (lastTimeStr != timeString) {
+    lastTimeStr = timeString;
+    tft.setTextSize(6); 
+    tft.setTextColor(colorMint, TFT_BLACK); 
+    tft.setCursor(15, 15);
+    tft.print(timeString);
+  }
 
-  sprintf(dateString, "%s, %02d %s %04d   ", 
-          days[ti->tm_wday], 
-          ti->tm_mday, 
-          months[ti->tm_mon], 
-          ti->tm_year + 1900);
+  if (ti->tm_mday != lastDateDay) {
+    lastDateDay = ti->tm_mday;
+    char dateString[32];
+    const char* days[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+    const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
-  tft.setTextSize(2); 
-  tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK); 
-  
-  int strWidth = strlen(dateString) * 12;
-  int xPos = (320 - strWidth) / 2 + 10; 
-  
-  tft.setCursor(xPos, 70); 
-  tft.print(dateString);
+    sprintf(dateString, "%s, %02d %s %04d   ", 
+            days[ti->tm_wday], 
+            ti->tm_mday, 
+            months[ti->tm_mon], 
+            ti->tm_year + 1900);
+
+    tft.setTextSize(2); 
+    tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK); 
+    
+    int strWidth = strlen(dateString) * 12;
+    int xPos = (320 - strWidth) / 2 + 10; 
+    
+    tft.setCursor(xPos, 70); 
+    tft.print(dateString);
+  }
 }
 
 void drawDegreeSymbol(int x, int y, int radius, uint16_t color) {
@@ -306,43 +343,45 @@ void ledWrite(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void drawWeatherDashboard() {
-  if (outdoor_temp == -100 || outdoor_humidity == -100) {
-    tft.setTextSize(2);
-    tft.setCursor(20, 150);
-    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.print("Loading...   "); 
-  } else {
-    if (isFirstWeatherDraw) {
-      tft.fillRect(10, 120, 130, 80, TFT_BLACK);
-      isFirstWeatherDraw = false;
-    }
+  if (!dashSpriteInited) {
+    dashSprite.createSprite(310, 90);
+    dashSpriteInited = true;
+  }
 
-    tft.setTextSize(3);
-    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+  dashSprite.fillSprite(TFT_BLACK);
+
+  if (outdoor_temp == -100 || outdoor_humidity == -100) {
+    dashSprite.setTextSize(2);
+    dashSprite.setCursor(10, 30);
+    dashSprite.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    dashSprite.print("Loading...");
+  } else {
+    dashSprite.setTextSize(3);
+    dashSprite.setTextColor(TFT_YELLOW, TFT_BLACK);
     
     char outTempStr[8];
     sprintf(outTempStr, "%+d", outdoor_temp); 
     
-    tft.fillRect(70, 130, 50, 25, TFT_BLACK);
+    dashSprite.setCursor(10, 10);
+    dashSprite.print(outTempStr);
     
-    tft.setCursor(20, 130); 
-    tft.print(outTempStr);
+    int outCx = dashSprite.getCursorX(); 
+    dashSprite.drawCircle(outCx + 5, 13, 3, TFT_YELLOW);
+    dashSprite.drawCircle(outCx + 5, 13, 2, TFT_YELLOW);
     
-    int outCx = tft.getCursorX(); 
-    drawDegreeSymbol(outCx + 5, 130, 3, TFT_YELLOW);
-    
-    tft.setCursor(outCx + 14, 130);
-    tft.print("C");
+    dashSprite.setCursor(outCx + 14, 10);
+    dashSprite.print("C");
 
-    tft.setTextSize(2);
-    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    dashSprite.setTextSize(2);
+    dashSprite.setTextColor(TFT_CYAN, TFT_BLACK);
     char outHumStr[12];
-    sprintf(outHumStr, "%d%%  ", outdoor_humidity);
-    tft.setCursor(20, 175);
-    tft.print(outHumStr);
+    sprintf(outHumStr, "%d%%", outdoor_humidity);
+    dashSprite.setCursor(10, 55);
+    dashSprite.print(outHumStr);
   }
-  tft.setTextSize(4);
-  tft.setTextColor(TFT_ORANGE, TFT_BLACK);
+
+  dashSprite.setTextSize(4);
+  dashSprite.setTextColor(TFT_ORANGE, TFT_BLACK);
   
   char inTempStr[8];
   if (indoor_temp < -50 || indoor_temp > 150) {
@@ -351,25 +390,26 @@ void drawWeatherDashboard() {
     sprintf(inTempStr, "%.1f", indoor_temp);
   }
   
-  tft.fillRect(240, 125, 70, 35, TFT_BLACK);
-
-  tft.setCursor(160, 125); 
-  tft.print(inTempStr);
+  dashSprite.setCursor(150, 5);
+  dashSprite.print(inTempStr);
   if (indoor_temp >= -50 && indoor_temp <= 150) {
-    int inCx = tft.getCursorX();
-    drawDegreeSymbol(inCx + 6, 125, 4, TFT_ORANGE);
-    tft.setCursor(inCx + 18, 125);
-    tft.print("C");
+    int inCx = dashSprite.getCursorX();
+    dashSprite.drawCircle(inCx + 6, 9, 4, TFT_ORANGE);
+    dashSprite.drawCircle(inCx + 6, 9, 3, TFT_ORANGE);
+    dashSprite.setCursor(inCx + 18, 5);
+    dashSprite.print("C");
   }
-  tft.fillRect(230, 165, 86, 50, TFT_BLACK);
-  int cx = 255, cy = 190, r = 10;
+
+  int cx = 245, cy = 70, r = 10;
   if (lightState) {
-    tft.fillCircle(cx, cy, r, tft.color565(ledR, ledG, ledB));
+    dashSprite.fillCircle(cx, cy, r, dashSprite.color565(ledR, ledG, ledB));
   } else {
-    tft.drawCircle(cx, cy, r, TFT_DARKGREY);
-    tft.drawCircle(cx, cy, r - 1, TFT_DARKGREY);
-    tft.drawCircle(cx, cy, r - 2, TFT_DARKGREY);
+    dashSprite.drawCircle(cx, cy, r, TFT_DARKGREY);
+    dashSprite.drawCircle(cx, cy, r - 1, TFT_DARKGREY);
+    dashSprite.drawCircle(cx, cy, r - 2, TFT_DARKGREY);
   }
+
+  dashSprite.pushSprite(10, 120);
 }
 
 void updateOutDoorWeather() {
