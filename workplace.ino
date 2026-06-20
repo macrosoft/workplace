@@ -206,6 +206,8 @@ void loop() {
     if (dashChanged) {
       drawWeatherDashboard();
     }
+
+    drawInterfaceSkeleton();
   }
 
   delay(1);
