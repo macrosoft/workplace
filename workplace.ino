@@ -290,42 +290,39 @@ void ledWrite(uint8_t r, uint8_t g, uint8_t b) {
 void drawWeatherDashboard() {
   if (outdoor_temp == -100 || outdoor_humidity == -100) {
     tft.setTextSize(2);
-    tft.setCursor(100, 150);
+    tft.setCursor(20, 150);
     tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.print("Loading...");
-    return;
+    tft.print("Loading...   "); 
+  } else {
+    if (isFirstWeatherDraw) {
+      tft.fillRect(10, 120, 130, 80, TFT_BLACK);
+      isFirstWeatherDraw = false;
+    }
+
+    tft.setTextSize(3);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    
+    char outTempStr[8];
+    sprintf(outTempStr, "%+d", outdoor_temp); 
+    
+    tft.fillRect(70, 130, 50, 25, TFT_BLACK);
+    
+    tft.setCursor(20, 130); 
+    tft.print(outTempStr);
+    
+    int outCx = tft.getCursorX(); 
+    drawDegreeSymbol(outCx + 5, 130, 3, TFT_YELLOW);
+    
+    tft.setCursor(outCx + 14, 130);
+    tft.print("C");
+
+    tft.setTextSize(2);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    char outHumStr[12];
+    sprintf(outHumStr, "%d%%  ", outdoor_humidity);
+    tft.setCursor(20, 175);
+    tft.print(outHumStr);
   }
-
-  if (isFirstWeatherDraw) {
-    tft.fillRect(2, 100, 316, 135, TFT_BLACK);
-    isFirstWeatherDraw = false;
-  }
-
-  tft.setTextSize(3);
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  
-  char outTempStr[8];
-  sprintf(outTempStr, "%+d", outdoor_temp); 
-  
-  tft.fillRect(70, 130, 50, 25, TFT_BLACK);
-  
-  tft.setCursor(20, 130); 
-  tft.print(outTempStr);
-  
-  int outCx = tft.getCursorX(); 
-  drawDegreeSymbol(outCx + 5, 130, 3, TFT_YELLOW);
-  
-  tft.setCursor(outCx + 14, 130);
-  tft.print("C");
-
-  tft.setTextSize(2);
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  char outHumStr[12];
-  sprintf(outHumStr, "%d%%  ", outdoor_humidity);
-  tft.setCursor(20, 175);
-  tft.print(outHumStr);
-
-
   tft.setTextSize(4);
   tft.setTextColor(TFT_ORANGE, TFT_BLACK);
   
@@ -340,14 +337,12 @@ void drawWeatherDashboard() {
 
   tft.setCursor(160, 125); 
   tft.print(inTempStr);
-
   if (indoor_temp >= -50 && indoor_temp <= 150) {
     int inCx = tft.getCursorX();
     drawDegreeSymbol(inCx + 6, 125, 4, TFT_ORANGE);
     tft.setCursor(inCx + 18, 125);
     tft.print("C");
   }
-
   tft.fillRect(230, 165, 86, 50, TFT_BLACK);
   int cx = 255, cy = 190, r = 10;
   if (lightState) {
