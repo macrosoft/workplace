@@ -59,6 +59,8 @@ float v = 1.0;
 float saturation = 1.0;
 uint8_t ledR, ledG, ledB;
 
+int lastWiFiState = -1;
+
 void setup() {
   Serial.begin(115200);
   Serial.println("\n[SYSTEM] Booting ESP32...");
@@ -186,27 +188,43 @@ void drawInterfaceSkeleton() {
 }
 
 void updateWiFiStatus() {
-  tft.setTextSize(1);     
-  if (WiFi.getMode() == WIFI_STA && WiFi.status() == WL_CONNECTED) {
-    tft.fillRect(2, 2, 316, 15, TFT_BLACK);
-  } else if (WiFi.getMode() == WIFI_AP) {
-    tft.setCursor(10, 10);
-    tft.setTextColor(TFT_RED, TFT_BLACK);
-    tft.print("AP MODE: Connect to 'workplace'        ");
+  int currentState = 0;
+
+  if (WiFi.getMode() == WIFI_AP) {
+    currentState = 3;
+  } else if (WiFi.status() == WL_CONNECTED) {
+    currentState = 1;
   } else {
-    tft.setCursor(10, 10);
+    currentState = 2;
+  }
+
+  if (currentState == lastWiFiState) {
+    return; 
+  }
+
+  lastWiFiState = currentState;
+  tft.fillRect(0, 0, 320, 10, TFT_BLACK); 
+  tft.setTextSize(1);     
+  if (currentState == 3) {
+    tft.setCursor(10, 2);
+    tft.setTextColor(TFT_RED, TFT_BLACK);
+    tft.print("AP MODE: Connect to 'workplace'");
+  } else if (currentState == 2) {
+    tft.setCursor(10, 2);
     tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-    tft.print("WiFi: Offline - Reconnecting...        ");
+    tft.print("WiFi: Offline - Reconnecting...");
   }
 }
 
 void updateClock() {
   unsigned long epochTime = ntp.getTime();
 
+  uint16_t colorMint = tft.color565(100, 255, 130); 
+
   if (epochTime == 0) {
-    tft.setTextSize(5); 
+    tft.setTextSize(6); 
     tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    tft.setCursor(40, 25); 
+    tft.setCursor(15, 15);
     tft.print("--:--:--");
     return;
   }
@@ -218,9 +236,9 @@ void updateClock() {
   char timeString[9];
   sprintf(timeString, "%02d:%02d:%02d", ti->tm_hour, ti->tm_min, ti->tm_sec);
   
-  tft.setTextSize(5); 
-  tft.setTextColor(TFT_GREEN, TFT_BLACK);
-  tft.setCursor(40, 25); 
+  tft.setTextSize(6); 
+  tft.setTextColor(colorMint, TFT_BLACK); 
+  tft.setCursor(15, 15);
   tft.print(timeString);
 
   char dateString[32];
