@@ -525,13 +525,14 @@ void handleWebClient() {
     client.print(INDEX_HTML);
   } else if (method == "POST" && path == "/save") {
     int p1, p2;
-
+    bool needToSaveSPIFFS = false; 
     p1 = body.indexOf("lo=");
     if (p1 >= 0) {
       p1 += 3;
       p2 = body.indexOf("&", p1);
       if (p2 < 0) p2 = body.length();
       cfg.lightLow = body.substring(p1, p2).toInt();
+      needToSaveSPIFFS = true;
     }
 
     p1 = body.indexOf("hi=");
@@ -540,6 +541,7 @@ void handleWebClient() {
       p2 = body.indexOf("&", p1);
       if (p2 < 0) p2 = body.length();
       cfg.lightHigh = body.substring(p1, p2).toInt();
+      needToSaveSPIFFS = true;
     }
 
     p1 = body.indexOf("oh=");
@@ -550,10 +552,15 @@ void handleWebClient() {
       offsetHue = body.substring(p1, p2).toFloat();
     }
 
-    fs::File f = SPIFFS.open("/config", "w");
-    if (f) {
-      f.write((uint8_t*)&cfg, sizeof(cfg));
-      f.close();
+    if (needToSaveSPIFFS) {
+      fs::File f = SPIFFS.open("/config", "w");
+      if (f) {
+        f.write((uint8_t*)&cfg, sizeof(cfg));
+        f.close();
+        Serial.println("[HTTP] Config saved to SPIFFS");
+      }
+    } else {
+      Serial.println("[HTTP] OffsetHue updated in RAM");
     }
 
     client.print("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\nOK");
