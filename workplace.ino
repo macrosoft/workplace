@@ -11,6 +11,7 @@
 
 #include "config.h"
 #include "ntp.h"
+#include "webpage.h"
 
 #define DS18B20_PIN 16
 #define PHOTO_PIN 34
@@ -520,66 +521,8 @@ void handleWebClient() {
   }
 
   if (method == "GET" && path == "/") {
-    String html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\">";
-    html += "<title>Workplace</title>";
-    html += "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
-    html += "<style>";
-    html += "body{font-family:Arial;margin:20px;background:#222;color:#ddd}";
-    html += "h1{color:#0f0}table{width:100%;border-collapse:collapse}";
-    html += "td{padding:8px 4px}.lbl{color:#999;font-size:.9em}";
-    html += ".val{font-size:1.5em;font-weight:bold;text-align:right}";
-    html += ".sec{margin:20px 0;padding:15px;background:#333;border-radius:8px}";
-    html += "input{width:100%;padding:8px;margin:4px 0 12px;box-sizing:border-box}";
-    html += "input[type=submit]{background:#070;color:#fff;border:0;padding:10px;font-size:1em;cursor:pointer}";
-    html += "label{font-weight:bold}";
-    html += ".swatch{width:60px;height:60px;border-radius:50%;border:2px solid #555;flex-shrink:0}";
-    html += ".row{display:flex;align-items:center;gap:15px}";
-    html += "input[type=range]{width:100%}";
-    html += "</style></head><body>";
-    html += "<h1>Workplace</h1>";
-    html += "<div class=\"sec\"><table>";
-    html += "<tr><td class=\"lbl\">Indoor</td><td class=\"val\" id=\"in\">--.-</td><td>&deg;C</td></tr>";
-    html += "<tr><td class=\"lbl\">Outdoor</td><td class=\"val\" id=\"out\">--</td><td>&deg;C</td></tr>";
-    html += "<tr><td class=\"lbl\">Humidity</td><td class=\"val\" id=\"hum\">--</td><td>%</td></tr>";
-    html += "<tr><td class=\"lbl\">Light</td><td class=\"val\" id=\"light\">--</td><td></td></tr>";
-    html += "</table></div>";
-    html += "<div class=\"sec\">";
-    html += "<h2>Light thresholds</h2>";
-    html += "<label>ON (dark) <input type=\"number\" id=\"lo\" value=\"" + String(cfg.lightLow) + "\"></label>";
-    html += "<label>OFF (bright) <input type=\"number\" id=\"hi\" value=\"" + String(cfg.lightHigh) + "\"></label>";
-    html += "<input type=\"submit\" value=\"Apply\" onclick=\"save()\">";
-    html += "<p id=\"msg\"></p>";
-    html += "</div>";
-    html += "<div class=\"sec\">";
-    html += "<h2>LED Color</h2>";
-    html += "<div class=\"row\">";
-    html += "<div class=\"swatch\" id=\"swatch\"></div>";
-    html += "<div style=\"flex:1\">";
-    html += "<label>Hue offset <span id=\"hueVal\">0</span>&deg;</label>";
-    html += "<input type=\"range\" id=\"oh\" min=\"0\" max=\"360\" value=\"0\" oninput=\"setHue(this.value)\">";
-    html += "</div></div></div>";
-    html += "<script>";
-    html += "function save(){";
-    html += "var b='lo='+document.getElementById('lo').value+'&hi='+document.getElementById('hi').value;";
-    html += "fetch('/save',{method:'POST',body:b,headers:{'Content-Type':'application/x-www-form-urlencoded'}})";
-    html += ".then(function(r){document.getElementById('msg').textContent='Saved'});}";
-    html += "function setHue(v){";
-    html += "document.getElementById('hueVal').textContent=v;";
-    html += "fetch('/save',{method:'POST',body:'oh='+(v/360),headers:{'Content-Type':'application/x-www-form-urlencoded'}});}";
-    html += "setInterval(function(){";
-    html += "fetch('/ajax').then(function(r){return r.json()}).then(function(d){";
-    html += "document.getElementById('in').textContent=d.i;";
-    html += "document.getElementById('out').textContent=d.o;";
-    html += "document.getElementById('hum').textContent=d.h;";
-    html += "document.getElementById('light').textContent=d.l;";
-    html += "document.getElementById('swatch').style.background='rgb('+d.r+','+d.g+','+d.b+')';";
-    html += "document.getElementById('oh').value=Math.round(d.oh*360);";
-    html += "document.getElementById('hueVal').textContent=Math.round(d.oh*360);";
-    html += "})},2000);";
-    html += "</script></body></html>";
     client.print("HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n");
-    client.print(html);
-
+    client.print(INDEX_HTML);
   } else if (method == "POST" && path == "/save") {
     int p1, p2;
 
@@ -625,6 +568,8 @@ void handleWebClient() {
     json += ",\"g\":\"" + String(ledG) + "\"";
     json += ",\"b\":\"" + String(ledB) + "\"";
     json += ",\"oh\":\"" + String(offsetHue, 4) + "\"";
+    json += ",\"cl\":\"" + String(cfg.lightLow) + "\"";
+    json += ",\"ch\":\"" + String(cfg.lightHigh) + "\"";
     json += "}";
     client.print("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n");
     client.print(json);
