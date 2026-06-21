@@ -233,7 +233,7 @@ void updateWiFiStatus() {
   }
 
   lastWiFiState = currentState;
-  tft.fillRect(0, 0, 320, 10, TFT_BLACK); 
+  tft.fillRect(2, 2, 316, 10, TFT_BLACK);
   tft.setTextSize(1);     
   if (currentState == 3) {
     tft.setCursor(10, 2);
@@ -346,7 +346,7 @@ void ledWrite(uint8_t r, uint8_t g, uint8_t b) {
 
 void drawWeatherDashboard() {
   if (!dashSpriteInited) {
-    dashSprite.createSprite(310, 90);
+    dashSprite.createSprite(308, 90);
     dashSpriteInited = true;
   }
 
