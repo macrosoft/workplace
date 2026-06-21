@@ -102,7 +102,8 @@ void setup() {
   tft.setRotation(3);
   tft.fillScreen(TFT_BLACK);
 
-  drawInterfaceSkeleton();
+  updateLedColor();
+  updateFrameIndicator();
 
   updateClock();
   updateWiFiStatus();
@@ -186,6 +187,16 @@ void loop() {
       ledWrite(ledR, ledG, ledB);
     else
       ledWrite(0, 0, 0);
+    
+    bool frameChanged = false;
+    if (lightState != lastLightState || ledR != lastLedR || ledG != lastLedG || ledB != lastLedB) {
+      lastLightState = lightState;
+      lastLedR = ledR; lastLedG = ledG; lastLedB = ledB;
+      frameChanged = true;
+    }
+    if (frameChanged) {
+      updateFrameIndicator();
+    }
 
     bool dashChanged = false;
     if (outdoor_temp != lastOutTemp || outdoor_humidity != lastOutHum) {
@@ -206,15 +217,19 @@ void loop() {
     if (dashChanged) {
       drawWeatherDashboard();
     }
-
-    drawInterfaceSkeleton();
   }
 
   delay(1);
 }
 
-void drawInterfaceSkeleton() {
-  tft.drawRect(0, 0, 320, 240, TFT_DARKGREY);
+void updateFrameIndicator() {
+  uint16_t currentColor = tft.color565(ledR, ledG, ledB);
+  tft.drawRect(0, 0, 320, 240, currentColor);
+  if (lightState) {
+    tft.drawRect(1, 1, 318, 238, currentColor);
+  } else {
+    tft.drawRect(1, 1, 318, 238, TFT_BLACK);
+  }
 }
 
 void updateWiFiStatus() {
@@ -400,15 +415,6 @@ void drawWeatherDashboard() {
     dashSprite.drawCircle(inCx + 6, 9, 3, TFT_ORANGE);
     dashSprite.setCursor(inCx + 18, 5);
     dashSprite.print("C");
-  }
-
-  int cx = 245, cy = 70, r = 10;
-  if (lightState) {
-    dashSprite.fillCircle(cx, cy, r, dashSprite.color565(ledR, ledG, ledB));
-  } else {
-    dashSprite.drawCircle(cx, cy, r, TFT_DARKGREY);
-    dashSprite.drawCircle(cx, cy, r - 1, TFT_DARKGREY);
-    dashSprite.drawCircle(cx, cy, r - 2, TFT_DARKGREY);
   }
 
   dashSprite.pushSprite(10, 120);
