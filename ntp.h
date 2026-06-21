@@ -2,14 +2,14 @@
 #define NTP_H
 
 #include <WiFiUdp.h>
-#include <time.h> // Нужно для структур времени
+#include <time.h> 
 
 class NtpClient {
   public:
     NtpClient();
     void begin();
     void handle();
-    unsigned long getTime(); // ТЕПЕРЬ ВОЗВРАЩАЕТ UNSIGNED LONG (Полный Unix Time)
+    unsigned long getTime(); 
   private:
     static const int NTP_SERVER_COUNT = 5;
     static const int NTP_PACKET_SIZE = 48;
@@ -21,19 +21,21 @@ class NtpClient {
     WiFiUDP udpNtp;
     int ntp_state;
     
-    unsigned long last1HzTick = 0;
     unsigned long parseTimeoutStart = 0;
     unsigned long lastSyncTime = 0;
     
     byte currentNtpServer;
-    unsigned long now; // ТЕПЕРЬ ХРАНИТ ПОЛНЫЙ UNIX TIMESTAMP
+    
+    unsigned long baseUnixTime; // Точное время NTP в момент синхронизации
+    unsigned long syncMillis;   // Значение millis() в момент синхронизации
 
     void sendNtpPacket(const char address[]);
     unsigned long parseNtpPacket();
 };
 
 NtpClient::NtpClient() {
-  now = 0;
+  baseUnixTime = 0;
+  syncMillis = 0;
   currentNtpServer = -1;
   ntp_state = NTP_INIT;
 }
@@ -45,13 +47,6 @@ void NtpClient::begin() {
 }
 
 void NtpClient::handle() {
-  if (millis() - last1HzTick >= 1000) {
-    last1HzTick = millis();
-    if (now > 0) {
-      ++now; // Прибавляем 1 секунду к Unix Time
-    }
-  }
-
   if (WiFi.status() == WL_CONNECTED) {
     switch (ntp_state) {
       case NTP_INIT: {
@@ -65,7 +60,9 @@ void NtpClient::handle() {
         if (millis() - parseTimeoutStart >= 3000) { 
           unsigned long t = parseNtpPacket();
           if (t > 0) {
-            now = t;
+            baseUnixTime = t;         // Запоминаем время из интернета
+            syncMillis = millis();    // Запоминаем время работы процессора в этот миг
+            
             ntp_state = NTP_WAITING;
             lastSyncTime = millis(); 
             Serial.println("[NTP DBG] Success! Time synced.");
@@ -77,6 +74,7 @@ void NtpClient::handle() {
         break;
       }
       case NTP_WAITING: {
+        // Синхронизируемся раз в 6 часов (21600000 мс)
         if (millis() - lastSyncTime >= 21600000UL) { 
           ntp_state = NTP_INIT;
         }
@@ -91,7 +89,11 @@ void NtpClient::handle() {
 }
 
 unsigned long NtpClient::getTime() {
-  return now;
+  // Если синхронизации еще ни разу не было - возвращаем 0
+  if (baseUnixTime == 0) return 0;
+  
+  unsigned long elapsedSecs = (millis() - syncMillis) / 1000;
+  return baseUnixTime + elapsedSecs;
 }
 
 void NtpClient::sendNtpPacket(const char address[]) {
@@ -124,8 +126,7 @@ unsigned long NtpClient::parseNtpPacket() {
                                 (unsigned long)packetBuffer[43];
 
   const unsigned long seventyYears = 2208988800UL;
-  // Возвращаем полный Timestamp (с учетом UTC+3)
-  return secsSince1900 - seventyYears + 10800; 
+  return secsSince1900 - seventyYears + 10800; // Возвращаем UTC+3
 }
 
 #endif
