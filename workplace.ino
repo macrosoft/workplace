@@ -69,6 +69,12 @@ float v = 1.0;
 float saturation = 1.0;
 uint8_t ledR, ledG, ledB;
 
+bool fadeActive = false;
+unsigned long fadeStart = 0;
+uint8_t fadeR0 = 0, fadeG0 = 0, fadeB0 = 0;
+uint8_t fadeR1 = 0, fadeG1 = 0, fadeB1 = 0;
+uint8_t actualLedR = 0, actualLedG = 0, actualLedB = 0;
+
 int lastWiFiState = -1;
 
 void setup() {
@@ -178,16 +184,45 @@ void loop() {
   else if (lightState && lightLevel < cfg.lightLow)
     lightState = false;
 
+  static bool prevLightState = false;
+  if (lightState != prevLightState) {
+    prevLightState = lightState;
+    fadeStart = millis();
+    if (lightState) {
+      fadeR0 = 0; fadeG0 = 0; fadeB0 = 0;
+      fadeR1 = ledR; fadeG1 = ledG; fadeB1 = ledB;
+    } else {
+      fadeR0 = actualLedR; fadeG0 = actualLedG; fadeB0 = actualLedB;
+      fadeR1 = 0; fadeG1 = 0; fadeB1 = 0;
+    }
+    fadeActive = true;
+  }
+
+  if (fadeActive) {
+    unsigned long elapsed = millis() - fadeStart;
+    float t = elapsed < 5000 ? (float)elapsed / 5000.0f : 1.0f;
+    actualLedR = fadeR0 + (fadeR1 - fadeR0) * t;
+    actualLedG = fadeG0 + (fadeG1 - fadeG0) * t;
+    actualLedB = fadeB0 + (fadeB1 - fadeB0) * t;
+    ledWrite(actualLedR, actualLedG, actualLedB);
+    if (t >= 1.0f) fadeActive = false;
+  }
+
   if (millis() - lastScreenUpdate >= 1000) {
     lastScreenUpdate = millis();
 
     updateClock();
     updateWiFiStatus();
     updateLedColor();
-    if (lightState)
-      ledWrite(ledR, ledG, ledB);
-    else
-      ledWrite(0, 0, 0);
+    if (!fadeActive) {
+      if (lightState) {
+        ledWrite(ledR, ledG, ledB);
+        actualLedR = ledR; actualLedG = ledG; actualLedB = ledB;
+      } else {
+        ledWrite(0, 0, 0);
+        actualLedR = 0; actualLedG = 0; actualLedB = 0;
+      }
+    }
     
     bool frameChanged = false;
     if (lightState != lastLightState || ledR != lastLedR || ledG != lastLedG || ledB != lastLedB) {
