@@ -77,6 +77,10 @@ uint8_t actualLedR = 0, actualLedG = 0, actualLedB = 0;
 
 int lastWiFiState = -1;
 
+IPAddress tvIp;
+bool tvDimActive = false;
+unsigned long lastTvCheck = 0;
+
 void setup() {
   Serial.begin(115200);
   Serial.println("\n[SYSTEM] Booting ESP32...");
@@ -157,6 +161,9 @@ void setup() {
   ArduinoOTA.setHostname("workplace");
   if (!connected) ArduinoOTA.setPassword(PASSWORD);
   ArduinoOTA.begin();
+
+  tvIp.fromString(TV_IP);
+  Serial.printf("[TV] Target IP: %s\n", TV_IP);
 }
 
 void loop() {
@@ -206,6 +213,21 @@ void loop() {
     actualLedB = fadeB0 + (fadeB1 - fadeB0) * t;
     ledWrite(actualLedR, actualLedG, actualLedB);
     if (t >= 1.0f) fadeActive = false;
+  }
+
+  if (lightState && WiFi.status() == WL_CONNECTED) {
+    if (millis() - lastTvCheck >= 60000) {
+      lastTvCheck = millis();
+      WiFiClient c;
+      bool online = c.connect(tvIp, 3001, 1000);
+      c.stop();
+      if (online != tvDimActive) {
+        tvDimActive = online;
+        Serial.printf("[TV] %s - %s\n", online ? "Online" : "Offline", online ? "dimming to 25%" : "full brightness");
+      }
+    }
+  } else {
+    tvDimActive = false;
   }
 
   if (millis() - lastScreenUpdate >= 1000) {
@@ -374,6 +396,11 @@ void updateLedColor() {
 }
 
 void ledWrite(uint8_t r, uint8_t g, uint8_t b) {
+  if (tvDimActive) {
+    r = r * 0.25f;
+    g = g * 0.25f;
+    b = b * 0.25f;
+  }
   digitalWrite(LED_DATA_PIN, LOW);
   for (byte i = 0; i < 32; i++) {
     digitalWrite(LED_CLK_PIN, LOW);
