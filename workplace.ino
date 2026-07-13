@@ -69,11 +69,10 @@ float v = 1.0;
 float saturation = 1.0;
 uint8_t ledR, ledG, ledB;
 
-bool fadeActive = false;
-unsigned long fadeStart = 0;
-uint8_t fadeR0 = 0, fadeG0 = 0, fadeB0 = 0;
-uint8_t fadeR1 = 0, fadeG1 = 0, fadeB1 = 0;
-uint8_t actualLedR = 0, actualLedG = 0, actualLedB = 0;
+// НОВЫЕ ПЕРЕМЕННЫЕ ДЛЯ ИДЕАЛЬНО ПЛАВНОГО СВЕТА
+float currentBrightness = 0.0f; 
+float targetBrightness = 0.0f;
+bool forceLedUpdate = false;
 
 int lastWiFiState = -1;
 
@@ -86,9 +85,6 @@ void setup() {
   Serial.println("\n[SYSTEM] Booting ESP32...");
 
   sensors.begin();
-
-  pinMode(5, OUTPUT);
-  digitalWrite(5, HIGH);
 
   pinMode(LED_CLK_PIN, OUTPUT);
   pinMode(LED_DATA_PIN, OUTPUT);
@@ -185,67 +181,75 @@ void loop() {
     }
   }
 
+  // Опрос датчика освещенности
   lightLevel = analogRead(PHOTO_PIN);
   if (!lightState && lightLevel > cfg.lightHigh)
     lightState = true;
   else if (lightState && lightLevel < cfg.lightLow)
     lightState = false;
 
-  static bool prevLightState = false;
-  if (lightState != prevLightState) {
-    prevLightState = lightState;
-    fadeStart = millis();
-    if (lightState) {
-      fadeR0 = 0; fadeG0 = 0; fadeB0 = 0;
-      fadeR1 = ledR; fadeG1 = ledG; fadeB1 = ledB;
-    } else {
-      fadeR0 = actualLedR; fadeG0 = actualLedG; fadeB0 = actualLedB;
-      fadeR1 = 0; fadeG1 = 0; fadeB1 = 0;
-    }
-    fadeActive = true;
-  }
-
-  if (fadeActive) {
-    unsigned long elapsed = millis() - fadeStart;
-    float t = elapsed < 5000 ? (float)elapsed / 5000.0f : 1.0f;
-    actualLedR = fadeR0 + (fadeR1 - fadeR0) * t;
-    actualLedG = fadeG0 + (fadeG1 - fadeG0) * t;
-    actualLedB = fadeB0 + (fadeB1 - fadeB0) * t;
-    ledWrite(actualLedR, actualLedG, actualLedB);
-    if (t >= 1.0f) fadeActive = false;
-  }
-
-  if (lightState && WiFi.status() == WL_CONNECTED) {
-    if (millis() - lastTvCheck >= 60000) {
+    if (lightState && WiFi.status() == WL_CONNECTED) {
+    if (millis() - lastTvCheck >= 10000) { 
       lastTvCheck = millis();
       WiFiClient c;
-      bool online = c.connect(tvIp, 3001, 1000);
+      bool online = c.connect(tvIp, 3001, 150); 
       c.stop();
       if (online != tvDimActive) {
         tvDimActive = online;
-        Serial.printf("[TV] %s - %s\n", online ? "Online" : "Offline", online ? "dimming to 25%" : "full brightness");
+        Serial.printf("[TV] %s - %s\n", online ? "Online" : "Offline", online ? "dimming to 10%" : "full brightness");
       }
     }
   } else {
     tvDimActive = false;
   }
 
+  if (!lightState) {
+    targetBrightness = 0.0f;
+  } else if (tvDimActive) {
+    targetBrightness = 0.05f;
+  } else {
+    targetBrightness = 1.0f;
+  }
+
+  // === ВЫСОКОСКОРОСТНОЙ ЦИКЛ ПЛАВНОГО ЗАТУХАНИЯ (50 раз в секунду) ===
+  static unsigned long lastFadeTick = 0;
+  if (millis() - lastFadeTick >= 20) {
+    lastFadeTick = millis();
+    bool brightnessChanged = false;
+    
+    // Плавное приближение к цели (шаг 0.005 = 4 секунды на полный розжиг от 0 до 100%)
+    if (abs(currentBrightness - targetBrightness) > 0.005f) {
+      if (currentBrightness < targetBrightness) currentBrightness += 0.005f;
+      else currentBrightness -= 0.005f;
+      brightnessChanged = true;
+    } else if (currentBrightness != targetBrightness) {
+      currentBrightness = targetBrightness;
+      brightnessChanged = true;
+    }
+    
+    // Отправляем данные на ленту, если яркость плывет или изменился базовый цвет
+    if (brightnessChanged || forceLedUpdate) {
+      ledWrite((uint8_t)(ledR * currentBrightness), (uint8_t)(ledG * currentBrightness), (uint8_t)(ledB * currentBrightness));
+      forceLedUpdate = false;
+    }
+  }
+
+  // === НИЗКОСКОРОСТНОЙ ЦИКЛ ИНТЕРФЕЙСА (1 раз в секунду) ===
   if (millis() - lastScreenUpdate >= 1000) {
     lastScreenUpdate = millis();
 
     updateClock();
     updateWiFiStatus();
+    
+    // Просчет базового цвета (зависит от offsetHue)
+    uint8_t oldR = ledR, oldG = ledG, oldB = ledB;
     updateLedColor();
-    if (!fadeActive) {
-      if (lightState) {
-        ledWrite(ledR, ledG, ledB);
-        actualLedR = ledR; actualLedG = ledG; actualLedB = ledB;
-      } else {
-        ledWrite(0, 0, 0);
-        actualLedR = 0; actualLedG = 0; actualLedB = 0;
-      }
+    // Если базовый цвет изменился - даем команду отправить его на ленту в быстром цикле
+    if (ledR != oldR || ledG != oldG || ledB != oldB) {
+      forceLedUpdate = true;
     }
     
+    // Обновление рамки-индикатора
     bool frameChanged = false;
     if (lightState != lastLightState || ledR != lastLedR || ledG != lastLedG || ledB != lastLedB) {
       lastLightState = lightState;
@@ -256,6 +260,7 @@ void loop() {
       updateFrameIndicator();
     }
 
+    // Обновление Спрайта погоды
     bool dashChanged = false;
     if (outdoor_temp != lastOutTemp || outdoor_humidity != lastOutHum) {
       lastOutTemp = outdoor_temp;
@@ -264,11 +269,6 @@ void loop() {
     }
     if (abs(indoor_temp - lastInTemp) > 0.05f) {
       lastInTemp = indoor_temp;
-      dashChanged = true;
-    }
-    if (lightState != lastLightState || ledR != lastLedR || ledG != lastLedG || ledB != lastLedB) {
-      lastLightState = lightState;
-      lastLedR = ledR; lastLedG = ledG; lastLedB = ledB;
       dashChanged = true;
     }
 
@@ -374,8 +374,8 @@ void updateClock() {
 }
 
 void drawDegreeSymbol(int x, int y, int radius, uint16_t color) {
-  tft.drawCircle(x, y + radius, radius, color);
-  tft.drawCircle(x, y + radius, radius - 1, color);
+  dashSprite.drawCircle(x, y + radius, radius, color);
+  dashSprite.drawCircle(x, y + radius, radius - 1, color);
 }
 
 void updateLedColor() {
@@ -396,11 +396,6 @@ void updateLedColor() {
 }
 
 void ledWrite(uint8_t r, uint8_t g, uint8_t b) {
-  if (tvDimActive) {
-    r = r * 0.25f;
-    g = g * 0.25f;
-    b = b * 0.25f;
-  }
   digitalWrite(LED_DATA_PIN, LOW);
   for (byte i = 0; i < 32; i++) {
     digitalWrite(LED_CLK_PIN, LOW);
@@ -446,8 +441,7 @@ void drawWeatherDashboard() {
     dashSprite.print(outTempStr);
     
     int outCx = dashSprite.getCursorX(); 
-    dashSprite.drawCircle(outCx + 5, 13, 3, TFT_YELLOW);
-    dashSprite.drawCircle(outCx + 5, 13, 2, TFT_YELLOW);
+    drawDegreeSymbol(outCx + 5, 10, 3, TFT_YELLOW); 
     
     dashSprite.setCursor(outCx + 14, 10);
     dashSprite.print("C");
@@ -474,8 +468,7 @@ void drawWeatherDashboard() {
   dashSprite.print(inTempStr);
   if (indoor_temp >= -50 && indoor_temp <= 150) {
     int inCx = dashSprite.getCursorX();
-    dashSprite.drawCircle(inCx + 6, 9, 4, TFT_ORANGE);
-    dashSprite.drawCircle(inCx + 6, 9, 3, TFT_ORANGE);
+    drawDegreeSymbol(inCx + 6, 5, 4, TFT_ORANGE);
     dashSprite.setCursor(inCx + 18, 5);
     dashSprite.print("C");
   }
@@ -588,6 +581,7 @@ void handleWebClient() {
   } else if (method == "POST" && path == "/save") {
     int p1, p2;
     bool needToSaveSPIFFS = false; 
+    
     p1 = body.indexOf("lo=");
     if (p1 >= 0) {
       p1 += 3;
