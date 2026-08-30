@@ -79,6 +79,7 @@ int lastWiFiState = -1;
 IPAddress tvIp;
 bool tvDimActive = false;
 unsigned long lastTvCheck = 0;
+uint8_t tvFailCount = 0;
 
 void setup() {
   Serial.begin(115200);
@@ -188,19 +189,34 @@ void loop() {
   else if (lightState && lightLevel < cfg.lightLow)
     lightState = false;
 
-    if (lightState && WiFi.status() == WL_CONNECTED) {
-    if (millis() - lastTvCheck >= 10000) { 
+  // Опрос состояния телевизора с защитой от ложных срабатываний
+  if (lightState && WiFi.status() == WL_CONNECTED) {
+    if (millis() - lastTvCheck >= 5000) { // Опрашиваем раз в 5 секунд
       lastTvCheck = millis();
       WiFiClient c;
-      bool online = c.connect(tvIp, 3001, 150); 
+      // Таймаут увеличен со 150 до 800 мс
+      bool online = c.connect(tvIp, 3001, 800); 
       c.stop();
-      if (online != tvDimActive) {
-        tvDimActive = online;
-        Serial.printf("[TV] %s - %s\n", online ? "Online" : "Offline", online ? "dimming to 10%" : "full brightness");
+
+      if (online) {
+        tvFailCount = 0; // Сбрасываем ошибки
+        if (!tvDimActive) {
+          tvDimActive = true;
+          Serial.println("[TV] Online - dimming to 5%");
+        }
+      } else {
+        tvFailCount++;
+        // Считаем ТВ выключенным только после 3 неудачных проверок подряд (15 секунд)
+        if (tvFailCount >= 3 && tvDimActive) {
+          tvDimActive = false;
+          Serial.println("[TV] Offline (confirmed) - full brightness");
+        }
       }
     }
-  } else {
+  } else if (!lightState) {
+    // Сбрасываем только если свет на рабочем месте физически выключен
     tvDimActive = false;
+    tvFailCount = 0;
   }
 
   if (!lightState) {
@@ -549,7 +565,14 @@ void handleWebClient() {
   String body = "";
   int contentLength = 0;
 
-  while (client.connected() && !client.available()) delay(1);
+  unsigned long timeout = millis() + 500;
+  while (client.connected() && !client.available() && millis() < timeout) {
+    delay(1);
+  }
+  if (!client.available()) {
+    client.stop();
+    return;
+  }
 
   if (client.available()) {
     String reqLine = client.readStringUntil('\n');
