@@ -394,6 +394,33 @@ void drawDegreeSymbol(int x, int y, int radius, uint16_t color) {
   dashSprite.drawCircle(x, y + radius, radius - 1, color);
 }
 
+// Термометр: (cx, topY) — центр трубки, верх иконки. Размер ~17×31 px
+void drawThermoIcon(int cx, int topY, uint16_t color) {
+  dashSprite.fillRoundRect(cx - 3, topY, 7, 21, 3, color);            // контур трубки
+  dashSprite.fillCircle(cx, topY + 24, 6, color);                      // шарик
+  dashSprite.fillRoundRect(cx - 1, topY + 3, 3, 14, 1, TFT_BLACK);     // полость трубки
+  dashSprite.fillCircle(cx, topY + 24, 4, color);                      // «ртуть» шарика
+  dashSprite.fillRect(cx - 1, topY + 12, 3, 11, color);                // столбик
+  dashSprite.drawLine(cx + 5, topY + 4,  cx + 8, topY + 4,  TFT_DARKGREY);  // деления
+  dashSprite.drawLine(cx + 5, topY + 10, cx + 8, topY + 10, TFT_DARKGREY);
+  dashSprite.drawLine(cx + 5, topY + 16, cx + 8, topY + 16, TFT_DARKGREY);
+}
+
+// Капля воды: (cx, topY) — кончик сверху. Размер ~15×19 px
+void drawDropIcon(int cx, int topY, uint16_t color, uint16_t highlight) {
+  dashSprite.fillTriangle(cx, topY, cx - 7, topY + 11, cx + 7, topY + 11, color);
+  dashSprite.fillCircle(cx, topY + 11, 7, color);
+  dashSprite.fillCircle(cx - 2, topY + 12, 2, highlight);              // блик
+}
+
+// Домик: (cx, topY) — вершина крыши. Размер ~31×27 px
+void drawHouseIcon(int cx, int topY, uint16_t color) {
+  dashSprite.fillTriangle(cx - 15, topY + 13, cx + 15, topY + 13, cx, topY, color); // крыша
+  dashSprite.fillRect(cx - 11, topY + 13, 23, 13, color);              // стены
+  dashSprite.fillRect(cx - 8, topY + 16, 5, 5, TFT_BLACK);             // окно
+  dashSprite.fillRect(cx + 2, topY + 16, 6, 10, TFT_BLACK);            // дверь
+}
+
 void updateLedColor() {
   float hue = fmod(millis() / 21600000.0 + offsetHue, 1.0);
   byte i = hue * 6;
@@ -447,13 +474,15 @@ void drawWeatherDashboard() {
     dashSprite.setTextColor(TFT_DARKGREY, TFT_BLACK);
     dashSprite.print("Loading...");
   } else {
+    drawThermoIcon(10, 6, TFT_YELLOW);
+
     dashSprite.setTextSize(3);
     dashSprite.setTextColor(TFT_YELLOW, TFT_BLACK);
-    
+
     char outTempStr[8];
-    sprintf(outTempStr, "%+d", outdoor_temp); 
-    
-    dashSprite.setCursor(10, 10);
+    sprintf(outTempStr, "%+d", outdoor_temp);
+
+    dashSprite.setCursor(25, 10);
     dashSprite.print(outTempStr);
     
     int outCx = dashSprite.getCursorX(); 
@@ -462,13 +491,17 @@ void drawWeatherDashboard() {
     dashSprite.setCursor(outCx + 14, 10);
     dashSprite.print("C");
 
+    drawDropIcon(10, 53, TFT_CYAN, dashSprite.color565(180, 240, 255));
+
     dashSprite.setTextSize(2);
     dashSprite.setTextColor(TFT_CYAN, TFT_BLACK);
     char outHumStr[12];
     sprintf(outHumStr, "%d%%", outdoor_humidity);
-    dashSprite.setCursor(10, 55);
+    dashSprite.setCursor(25, 55);
     dashSprite.print(outHumStr);
   }
+
+  drawHouseIcon(141, 6, TFT_ORANGE);
 
   dashSprite.setTextSize(4);
   dashSprite.setTextColor(TFT_ORANGE, TFT_BLACK);
@@ -480,7 +513,7 @@ void drawWeatherDashboard() {
     sprintf(inTempStr, "%.1f", indoor_temp);
   }
   
-  dashSprite.setCursor(150, 5);
+  dashSprite.setCursor(163, 5);
   dashSprite.print(inTempStr);
   if (indoor_temp >= -50 && indoor_temp <= 150) {
     int inCx = dashSprite.getCursorX();
